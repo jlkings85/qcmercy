@@ -7,7 +7,7 @@ The complete standalone application is in **[`ClinicalQC/`](./ClinicalQC/)**, wi
 - Repository: `jlkings85/qcmercy`, production branch `main`.
 - Target hostname: `https://qc.mercyems.net`.
 - Historical production data migration: **pending**. Do not open staff access or switch the production hostname until the complete database has been migrated and verified.
-- The recovered configuration contains a placeholder D1 database ID. Provision a separate `clinicalqc` database and set its ID in `ClinicalQC/wrangler.jsonc` before deployment. Do not use the ClinicalShifts database.
+- D1 is configured for database `mercyqc`, ID `ce971014-a56f-4456-868d-b21cd1a3478c`, with binding `DB`. Do not use the ClinicalShifts database.
 
 ## Cloudflare Workers build settings
 
