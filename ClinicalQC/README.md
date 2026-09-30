@@ -13,7 +13,7 @@ Preserved functionality includes county-specific truck/device choices, strip/con
 ## Deployment sequence
 
 1. Create a **private** GitHub repository named `clinicalqc` in your account. Upload the contents of this directory at the repository root. Include the lockfile and migrations. Do not upload `node_modules`, `dist`, `.dev.vars`, or database exports.
-2. In your Cloudflare account, create a **new D1 database named `clinicalqc`**. Replace the placeholder `database_id` in `wrangler.jsonc` with that database's ID. Never use the ClinicalShifts database or Worker.
+2. In your Cloudflare account, create a **new D1 database named `clinicalqc`**. The database ID in `wrangler.jsonc` is configured as `ce971014-a56f-4456-868d-b21cd1a3478c`. Never use the ClinicalShifts database or Worker.
 3. In Workers & Pages, create/connect a Worker named **`clinicalqc`** to that GitHub repository. Use Node **24**, pnpm **11.25.0**, production branch `main`, and the commands below. The root directory is the repository root.
 4. Set the Worker runtime variables/secrets below. Configure Resend with a verified sender domain. Do not place any secrets in GitHub source or share them in chat. Cloudflare build environment variables and Worker runtime variables are separate; these values belong to the Worker runtime.
 5. Deploy initially on its assigned `workers.dev` address. Set `BETTER_AUTH_URL` to that exact HTTPS address during staging. Import and verify the complete existing business database before owner activation. Do not activate a fresh empty workspace: owner enrollment intentionally requires the existing administrator record.
@@ -34,7 +34,7 @@ Preserved functionality includes county-specific truck/device choices, strip/con
 | Node version | `24` |
 | Production branch | `main` |
 
-`pnpm run deploy` rejects an unconfigured database, checks TypeScript, runs the authentication and migration tests, builds, applies additive database migrations to `clinicalqc`, and deploys the generated Worker. It never imports historical data automatically. The database migration commands need D1 permission in the Cloudflare build token; use the provider's secure permissions controls.
+`pnpm run deploy` rejects an unconfigured database, checks TypeScript, runs the authentication and migration tests, builds, applies additive database migrations to `mercyqc`, and deploys the generated Worker. It never imports historical data automatically. The database migration commands need D1 permission in the Cloudflare build token; use the provider's secure permissions controls.
 
 Official references: [Cloudflare Git builds](https://developers.cloudflare.com/workers/ci-cd/builds/), [build settings](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/), [Worker Custom Domains](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/), [Better Auth email/password](https://better-auth.com/docs/authentication/email-password).
 
@@ -73,7 +73,7 @@ After applying the numbered migrations to the new, empty destination:
 
 ```sh
 node scripts/migrate-data.mjs prepare migration-private/source.sqlite migration-private/data.sql
-pnpm exec wrangler d1 execute clinicalqc --remote --file migration-private/data.sql
+pnpm exec wrangler d1 execute mercyqc --remote --file migration-private/data.sql
 ```
 
 The utility creates an import SQL file plus a manifest of row counts and full-content hashes. It preserves row order, IDs, original JSON snapshots, truck and meter serial information, ranges, import source rows, temperature references, and the audit trail. Legacy ChatGPT `auth_id` values remain untouched as historical provenance. New verified logins use the separate `qc_login_links` table. No old identity header or email alone grants access.

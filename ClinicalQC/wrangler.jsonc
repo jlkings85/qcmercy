@@ -9,8 +9,8 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "clinicalqc",
-      "database_id": "00000000-0000-4000-8000-000000000000",
+      "database_name": "mercyqc",
+      "database_id": "ce971014-a56f-4456-868d-b21cd1a3478c",
       "migrations_dir": "drizzle"
     }
   ],
