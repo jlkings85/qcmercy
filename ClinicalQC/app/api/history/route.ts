@@ -1,0 +1,7 @@
+import {operator,admin,rows,decode,Problem} from '@/lib/server';
+import {previewImport,importHistory} from '@/lib/history-import';
+export const dynamic='force-dynamic';
+const json=(value:any,status=200)=>Response.json(value,{status,headers:{'Cache-Control':'no-store'}});
+function error(e:any){console.error('Historical import:',e.message);return json({error:e instanceof Problem?e.message:'The import could not be saved. No partial import was applied. Try previewing the file again.'},e instanceof Problem?e.code:500)}
+export async function GET(){try{const me=await operator();admin(me);return json({batches:(await rows('SELECT * FROM import_batches ORDER BY created_at DESC LIMIT 100')).map(decode)})}catch(e){return error(e)}}
+export async function POST(req:Request){try{const me=await operator();admin(me);const origin=req.headers.get('origin');if(origin&&origin!==new URL(req.url).origin)throw new Problem('Refresh this page and try again.',403);const raw=await req.text();if(raw.length>1200000)throw new Problem('Upload a CSV no larger than 1 MB.');const b=JSON.parse(raw);if(typeof b.filename!=='string'||b.filename.length>250)throw new Problem('The filename is invalid.');if(b.action==='preview'){const p=await previewImport(b.text,b.filename);const {pending,...safe}=p;return json(safe)}if(b.action==='import'){if(typeof b.expectedHash!=='string')throw new Problem('Preview the report before importing it.');return json(await importHistory(b.text,b.filename,me,b.expectedHash))}throw new Problem('Unknown import action.')}catch(e){return error(e)}}
