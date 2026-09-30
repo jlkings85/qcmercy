@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.wrangler/
+.next/
+.vinext/
+.env*
+!.env.example
+.dev.vars*
+!.dev.vars.example
+*.tsbuildinfo
+.auth-test-*/
+*.sqlite*
+*.db
+backups/
+migration-private/
+*.log
+.pnpm-store/
