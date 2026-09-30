@@ -1,0 +1,10 @@
+'use client';
+import {Sheet,SheetContent,SheetHeader,SheetTitle,SheetDescription} from '@/components/ui/sheet';
+import {credentialValid} from '@/lib/qc-rules';
+type R=Record<string,any>;
+// Uses only the records already returned for the signed-in person's access level.
+export default function OverviewList({kind,data,onClose}:{kind:string,data:R,onClose:()=>void}){
+ const titles:R={exceptions:'Open exceptions',devices:'Devices on hold',users:'Credentialed operators'};
+ const rows:R[]=kind==='devices'?data.assets.filter((a:R)=>a.kind==='device'&&a.active&&a.status==='hold'):kind==='users'?data.users.filter((u:R)=>credentialValid(u)):data.exceptions.filter((e:R)=>e.status!=='closed');
+ return <Sheet open={!!kind} onOpenChange={open=>!open&&onClose()}><SheetContent className="w-full max-w-[680px] bg-[#f7f9fc] sm:max-w-[680px]"><SheetHeader className="px-6 pb-4 pt-7"><SheetTitle>{titles[kind]||'Overview'}</SheetTitle><SheetDescription>{rows.length} matching {kind==='users'?'people':kind==='devices'?'devices':'exceptions'}. Contact your administrator for changes.</SheetDescription></SheetHeader><div className="sheet-scroll"><div className="panel divide-y">{rows.map(r=><div key={r.id} className="space-y-2 p-5">{kind==='devices'?<><p className="font-semibold">{r.serial} · {r.label}</p><p className="text-sm text-[#61768d]">{data.assets.find((a:R)=>a.id===r.departmentId)?.label||'Department not assigned'}</p><span className="badge red">On hold</span></>:kind==='users'?<><p className="font-semibold">{r.name}</p><p className="text-sm text-[#61768d]">{r.network_id||r.email}</p><p className="text-sm">Valid through {r.expires}</p><span className="badge green">Current credential</span></>:<><p className="font-semibold">{r.title}</p><p className="text-sm text-[#61768d]">{r.deviceSerial||'Credential review'}{r.truckLabel?' · '+r.truckLabel:''}</p><p className="text-sm capitalize">{r.status.replaceAll('_',' ')}</p></>}</div>)}{!rows.length&&<p className="p-6 text-sm text-[#61768d]">No matching items.</p>}</div></div></SheetContent></Sheet>
+}
