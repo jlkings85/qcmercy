@@ -1,0 +1,9 @@
+import {stmt,uid,now,auditStmt,Problem} from './server';
+import {evaluateTemperature} from './temperature';
+export function temperatureStatements(input:any,location:any,operator:any,observedDate:string,qcRecordId:string|null,id:string){
+ let reading;try{reading=evaluateTemperature(input,location)}catch(e:any){throw new Problem(e.message)}const ts=now();
+ const snapshot={...reading,location:{id:location.id,label:location.label,kind:location.kind,departmentId:location.departmentId||null},operator:{id:operator.id,name:operator.name,email:operator.email,identifier:operator.network_id||operator.email,networkId:operator.network_id||null},observedDate,qcRecordId};
+ const statements=[stmt('INSERT INTO temperature_records (id,location_id,qc_record_id,operator_id,observed_date,created_at,status,snapshot) VALUES (?,?,?,?,?,?,?,?)',id,location.id,qcRecordId,operator.id,observedDate,ts,reading.status,JSON.stringify(snapshot))];
+ if(reading.status!=='in_range'){const title=reading.status==='out_of_range'?'Temperature outside configured limits':'Temperature limits need configuration';statements.push(stmt('INSERT INTO exceptions (id,record_id,operator_id,category,title,status,created_at,updated_at,details) VALUES (?,?,?,?,?,?,?,?,?)',uid(),qcRecordId,operator.id,'temperature',title,'open',ts,ts,JSON.stringify({temperatureRecordId:id,temperature:snapshot,locationLabel:location.label,operatorName:operator.name,departmentId:location.departmentId||null,issues:[...reading.checks.filter(c=>!c.inRange).map(c=>`${c.material} outside ${c.min}–${c.max} °F`),`${location.label}: high ${reading.high}°, low ${reading.low}°, current ${reading.current}°${reading.units}`,reading.correctiveAction?'Corrective measure: '+reading.correctiveAction:'Acceptable temperature limits have not been entered.']})))}
+ statements.push(auditStmt(operator,id,'Temperature recorded',{location:location.label,observedDate,qcRecordId,...reading}));return {snapshot,statements};
+}
