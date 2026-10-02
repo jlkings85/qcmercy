@@ -1,3 +1,4 @@
+import {exceptionRepeatSql,repeatSummary} from '@/lib/exception-repeats';
 import {reviewNotes} from '@/lib/review-decisions';
 import { NextResponse } from 'next/server';
 import { Problem,db,stmt,rows,one,decode,uid,now,auditStmt,identity,operator,admin,review,required,date } from '@/lib/server';
@@ -35,7 +36,10 @@ export async function GET(req?:Request){try{
  isReviewer?rows("SELECT * FROM exceptions WHERE status!='excluded' ORDER BY created_at DESC LIMIT 1000"):rows("SELECT * FROM exceptions WHERE status!='excluded' AND operator_id=? ORDER BY created_at DESC LIMIT 500",me.id),
  isReviewer?rows("SELECT a.* FROM actions a JOIN exceptions e ON e.id=a.exception_id WHERE e.status!='excluded' ORDER BY a.created_at DESC LIMIT 2000"):rows("SELECT a.* FROM actions a JOIN exceptions e ON e.id=a.exception_id WHERE e.status!='excluded' AND e.operator_id=? ORDER BY a.created_at DESC LIMIT 500",me.id),
  me.role==='admin'?rows('SELECT * FROM audit ORDER BY created_at DESC LIMIT 300'):Promise.resolve([]),getTemperatureSettings()
- ]);return json({me,assets:assets.map(decode),users:users.map(decode),records:records.map(r=>({...r,snapshot:JSON.parse(r.snapshot)})),exceptions:exceptions.map(decode),actions:actions.map(decode),audit:audit.map(decode),temperatureSettings,today:centralDay()});
+ ]);
+ const repeatByException=new Map<string,any>();
+ if(isReviewer){for(let i=0;i<exceptions.length;i+=100){const ids=exceptions.slice(i,i+100).map(e=>e.id);for(const r of await rows(exceptionRepeatSql(ids.length),...ids))repeatByException.set(r.exception_id,repeatSummary(r));}}
+ return json({me,assets:assets.map(decode),users:users.map(decode),records:records.map(r=>({...r,snapshot:JSON.parse(r.snapshot)})),exceptions:exceptions.map(e=>({...decode(e),latestRepeat:repeatByException.get(e.id)||null})),actions:actions.map(decode),audit:audit.map(decode),temperatureSettings,today:centralDay()});
  }catch(e){return fail(e)}}
 export async function POST(req:Request){try{
  const origin=req.headers.get('origin');if(origin&&origin!==new URL(req.url).origin)throw new Problem('Please refresh ClinicalQC and try again.',403);
