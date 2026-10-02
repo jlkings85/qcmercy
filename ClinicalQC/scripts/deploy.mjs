@@ -8,6 +8,7 @@ run(['node_modules/typescript/bin/tsc','--noEmit']);
 run(['tests/auth.integration.mjs']);
 run(['tests/migration.integration.mjs']);
 run(['tests/bulk-invitations.integration.mjs']);
+run(['tests/barcodes.mjs']);
 run(['node_modules/vinext/dist/cli.js','build']);
 run(['node_modules/wrangler/bin/wrangler.js','d1','migrations','apply',binding.database_name,'--remote']);
 run(['node_modules/wrangler/bin/wrangler.js','deploy','--config','dist/server/wrangler.json']);

@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import {barcodeMatches} from '../lib/barcodes.ts';
+const items=[{id:'meter',kind:'device',serial:'204029624303'},...['0325208249','0426027301','0426021303'].map((lot,i)=>({id:lot,kind:['strip','low','high'][i],lot}))];
+for(const [kind,code,id] of [['device','21204029624303','meter'],['strip','0325208249','0325208249'],['low','0426027301','0426027301'],['high','0426021303','0426021303']])assert.equal(barcodeMatches(code,kind,items)[0]?.id,id);
+assert.equal(barcodeMatches(']d201003854805651031124102921204029624303','device',items)[0]?.id,'meter');
+assert.equal(barcodeMatches('(01)00385480565103(11)241029(21)204029624303','device',items)[0]?.id,'meter');
+assert.equal(barcodeMatches('010038548056510317271109100426021303','high',items)[0]?.lot,'0426021303');
+assert.equal(barcodeMatches('042 602 7301','low',items)[0]?.lot,'0426027301');
+assert.equal(barcodeMatches('0426021303','low',items).length,0,'High reagent cannot select a low reagent');
+assert.equal(barcodeMatches('9990325208249999','strip',items).length,0,'Do not match substrings');
+assert.equal(barcodeMatches('00385480565103','device',items).length,0,'Product GTIN is not a device serial');
+assert.equal(barcodeMatches('0325208249','strip',[...items,{...items[1],id:'duplicate'}]).length,2,'Ambiguous matches must remain ambiguous');
+console.log('Barcode identifiers: supplied meter and three lots, GS1, level isolation and ambiguity checks passed.');

@@ -10,7 +10,7 @@
     "build": "vinext build",
     "preview": "wrangler dev --config dist/server/wrangler.json --local",
     "typecheck": "tsc --noEmit",
-    "test": "node tests/auth.integration.mjs && node tests/migration.integration.mjs && node tests/bulk-invitations.integration.mjs",
+    "test": "node tests/auth.integration.mjs && node tests/migration.integration.mjs && node tests/bulk-invitations.integration.mjs && node tests/barcodes.mjs",
     "db:local": "wrangler d1 migrations apply mercyqc --local",
     "db:remote": "wrangler d1 migrations apply mercyqc --remote",
     "deploy": "node scripts/deploy.mjs"
@@ -19,6 +19,8 @@
     "@base-ui/react": "^1.7.0",
     "@hookform/resolvers": "^5.7.1",
     "@shadcn/react": "^0.3.0",
+    "@zxing/browser": "^0.1.5",
+    "@zxing/library": "^0.21.3",
     "better-auth": "1.7.4",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
