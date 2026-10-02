@@ -1,6 +1,6 @@
-export const CONTROL_RANGE_SOURCE='Mercy EMS QC ranges supplied by Josh Kingston on September 29, 2026';
+export const CONTROL_RANGE_SOURCE='Mercy EMS QC ranges supplied by Josh Kingston on October 2, 2026';
 export const CONTROL_RANGES={
- low:{min:35,max:75,units:'mg/dL',level:'low',source:CONTROL_RANGE_SOURCE,isDefault:true},
+ low:{min:44,max:74,units:'mg/dL',level:'low',source:CONTROL_RANGE_SOURCE,isDefault:true},
  high:{min:250,max:350,units:'mg/dL',level:'high',source:CONTROL_RANGE_SOURCE,isDefault:true},
 };
 export function controlRange(level:string,assets:any[],stripId?:string,controlId?:string){

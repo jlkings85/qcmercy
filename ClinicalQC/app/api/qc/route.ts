@@ -7,6 +7,7 @@ import {meterSerialKey} from '@/lib/meter-register';
 import {controlRange} from '@/lib/control-ranges';
 import {getTemperatureSettings,saveTemperatureSettings} from '@/lib/temperature-settings';
 import {qcTemperature} from '@/lib/qc-temperature';
+import {qcDeviceLocationStatements} from '@/lib/qc-device-location';
 import {closeExceptionAndRelease} from '@/lib/exception-release';
 import {REFERENCE_DEPARTMENTS,centralDayBounds,dailyCsv} from '@/lib/report';
 export const dynamic='force-dynamic';
@@ -97,7 +98,7 @@ export async function POST(req:Request){try{
  const snapshot={temperature:temp.snapshot,temperatureCapture:temp.capture,department,device,strip,low,high,lowRange:lr||null,highRange:hr||null,truck,operator:{identifier:me.network_id||me.email,identifierType:me.network_id?'network_id':'email',networkId:me.network_id,id:me.id,name:me.name,email:me.email,employeeId:me.employeeId,credentialStatus:me.credential_status,credentialRef:me.credentialRef,validSince:me.validSince||me.competencyDate,expires:me.expires,verifiedBy:me.verified_by,verifiedAt:me.verified_at},input:{...qcInput,...(temp.capture.mode==='recorded'?{temperature:submittedTemperature}:{}),networkId:me.network_id||me.email,seriesId,occurredAt:observed.toISOString()},...result};
  const ops=[stmt('INSERT INTO records (id,operator_id,device_id,occurred_at,created_at,status,snapshot) VALUES (?,?,?,?,?,?,?)',id,me.id,device.id,observed.toISOString(),ts,result.status,JSON.stringify(snapshot)),auditStmt(me,id,'QC recorded',{status:result.status,issues:result.issues,temperatureCapture:temp.capture})];
  if(result.issues.length){const exId=uid();ops.push(stmt('INSERT INTO exceptions (id,record_id,device_id,operator_id,category,title,status,created_at,updated_at,details) VALUES (?,?,?,?,?,?,?,?,?,?)',exId,id,device.id,me.id,'qc',result.issues[0],'open',ts,ts,JSON.stringify({issues:result.issues,operatorName:me.name,deviceSerial:device.serial,truckLabel:truck.label,departmentId:department.id,departmentLabel:department.label})));ops.push(stmt('UPDATE assets SET details=json_set(details,\'$.status\',\'hold\'),revision=revision+1 WHERE id=?',device.id));}
- await db().batch([...ops,...temp.statements]);return json({ok:true,id,status:result.status,issues:result.issues});
+ await db().batch([...ops,...temp.statements,...qcDeviceLocationStatements(db(),id,me,ts)]);return json({ok:true,id,status:result.status,issues:result.issues});
  }
  if(b.op==='reviewException'){
  review(me);const x=b.value,ex=await one('SELECT * FROM exceptions WHERE id=?',x.id);if(!ex||ex.status==='excluded')throw new Problem('Exception not found.',404);if(ex.revision!==x.revision)throw new Problem('This exception changed. Refresh to see the latest review.',409);
