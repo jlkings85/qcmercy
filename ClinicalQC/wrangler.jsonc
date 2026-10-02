@@ -16,5 +16,15 @@
   ],
   "observability": {
     "enabled": true
-  }
+  },
+  "keep_vars": true,
+  "vars": {
+    "BETTER_AUTH_URL": "https://qc.mercyems.net"
+  },
+  "routes": [
+    {
+      "pattern": "qc.mercyems.net",
+      "custom_domain": true
+    }
+  ]
 }
