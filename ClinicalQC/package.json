@@ -10,7 +10,7 @@
     "build": "vinext build",
     "preview": "wrangler dev --config dist/server/wrangler.json --local",
     "typecheck": "tsc --noEmit",
-    "test": "node tests/auth.integration.mjs && node tests/migration.integration.mjs",
+    "test": "node tests/auth.integration.mjs && node tests/migration.integration.mjs && node tests/bulk-invitations.integration.mjs",
     "db:local": "wrangler d1 migrations apply mercyqc --local",
     "db:remote": "wrangler d1 migrations apply mercyqc --remote",
     "deploy": "node scripts/deploy.mjs"
