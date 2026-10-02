@@ -15,7 +15,7 @@ export default function AuthScreen({initialMode='login'}:{initialMode?:Mode}){
  async function submit(e:React.FormEvent){e.preventDefault();setError('');setMessage('');setBusy(true);try{
   const path={login:'sign-in/email',register:'sign-up/email',forgot:'request-password-reset',reset:'reset-password',verify:'send-verification-email'}[mode];
   const body=mode==='register'?{name,email,password,callbackURL:'/login?verified=1'}:mode==='login'?{email,password,rememberMe:true}:mode==='reset'?{newPassword:password,token:new URLSearchParams(window.location.search).get('token')}:mode==='forgot'?{email,redirectTo:'/reset-password'}:{email,callbackURL:'/login?verified=1'};
-  const response=await fetch('/api/auth/'+path,{method:'POST',headers:{'Content-Type':'application/json',...(mode==='register'?{'x-clinicalqc-invitation':code.trim()}:{})},body:JSON.stringify(body)});const result=await response.json() as {message?:string};if(!response.ok)throw Error(result.message||'Unable to continue. Please try again.');
+  const response=await fetch('/api/auth/'+path,{method:'POST',headers:{'Content-Type':'application/json',...(mode==='register'?{'x-clinical-invitation':code.trim()}:{})},body:JSON.stringify(body)});const result=await response.json() as {message?:string};if(!response.ok)throw Error(result.message||'Unable to continue. Please try again.');
   if(mode==='login'){window.location.assign('/');return;}
   if(mode==='register'){try{sessionStorage.setItem('clinicalqc-invitation',code.trim());}catch{}setMode('verify');setPassword('');setMessage('Check your inbox for a verification link. You must verify your email before signing in.');}
   else if(mode==='reset'){setMode('login');setPassword('');setMessage('Password updated. Sign in with your new password.');}
