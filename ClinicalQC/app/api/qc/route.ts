@@ -1,3 +1,4 @@
+import {reviewNotes} from '@/lib/review-decisions';
 import { NextResponse } from 'next/server';
 import { Problem,db,stmt,rows,one,decode,uid,now,auditStmt,identity,operator,admin,review,required,date } from '@/lib/server';
 import { credentialValid,centralDay,evaluateQC } from '@/lib/qc-rules';
@@ -103,7 +104,7 @@ export async function POST(req:Request){try{
  if(b.op==='reviewException'){
  review(me);const x=b.value,ex=await one('SELECT * FROM exceptions WHERE id=?',x.id);if(!ex||ex.status==='excluded')throw new Problem('Exception not found.',404);if(ex.revision!==x.revision)throw new Problem('This exception changed. Refresh to see the latest review.',409);
  if(me.role==='supervisor'&&ex.assignee!==me.id)throw new Problem('Only the assigned supervisor can update this exception.',403);
- const action=required(x.action,'Action'),notes=required(x.notes,'Review or completion notes');const allowed=['Review and document','Assign remedial education','Request repeat QC','Replace test strips','Replace control solution','Remove device from service','Escalate for review','Document completion','Close exception','Reopen exception'];if(!allowed.includes(action))throw new Problem('Select a review action.');
+ const action=required(x.action,'Action');let notes:string;if(x.decision!==undefined){try{notes=reviewNotes(x.decision,x.notes)}catch(e){throw new Problem((e as Error).message)}}else{notes=required(x.notes,'Review or completion notes');}const allowed=['Review and document','Assign remedial education','Request repeat QC','Replace test strips','Replace control solution','Remove device from service','Escalate for review','Document completion','Close exception','Reopen exception'];if(!allowed.includes(action))throw new Problem('Select a review action.');
  if(me.role!=='admin'&&!['Document completion','Review and document','Close exception'].includes(action))throw new Problem('Only an administrator can assign or reopen exceptions or change the required action.',403);
  if(x.clearDeviceHold!==undefined&&typeof x.clearDeviceHold!=='boolean')throw new Problem('Choose whether to clear the device hold.');
  if(x.clearDeviceHold&&action!=='Close exception')throw new Problem('Clear device hold is available only when closing an exception.');
