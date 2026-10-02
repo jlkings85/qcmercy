@@ -1,3 +1,4 @@
+import {isOwnerEmail} from '@/lib/owner';
 import {exceptionRepeatSql,repeatSummary} from '@/lib/exception-repeats';
 import {reviewNotes} from '@/lib/review-decisions';
 import { NextResponse } from 'next/server';
@@ -16,7 +17,7 @@ export const dynamic='force-dynamic';
 const json=(data:any,status=200)=>NextResponse.json(data,{status,headers:{'Cache-Control':'no-store'}});
 function fail(e:any){console.error('ClinicalQC request failed',e.message);return json({error:e instanceof Problem?e.message:e.message?.includes('UNIQUE constraint')?'That serial number, lot, email, Network ID, or range already exists.': 'The request could not be saved. Your entries are still here. Please try again.'},e instanceof Problem?e.code:500)}
 export async function GET(req?:Request){try{
- await identity();
+ const signedIn=await identity();
  const me=await operator(),isReviewer=['admin','supervisor'].includes(me.role);
  const params=req?new URL(req.url).searchParams:null;
  if(params&&(params.has('reportStart')||params.has('reportEnd')||params.has('reportDate'))){
@@ -39,7 +40,7 @@ export async function GET(req?:Request){try{
  ]);
  const repeatByException=new Map<string,any>();
  if(isReviewer){for(let i=0;i<exceptions.length;i+=100){const ids=exceptions.slice(i,i+100).map(e=>e.id);for(const r of await rows(exceptionRepeatSql(ids.length),...ids))repeatByException.set(r.exception_id,repeatSummary(r));}}
- return json({me,assets:assets.map(decode),users:users.map(decode),records:records.map(r=>({...r,snapshot:JSON.parse(r.snapshot)})),exceptions:exceptions.map(e=>({...decode(e),latestRepeat:repeatByException.get(e.id)||null})),actions:actions.map(decode),audit:audit.map(decode),temperatureSettings,today:centralDay()});
+ return json({me:{...me,isOwner:me.role==='admin'&&isOwnerEmail(signedIn.email)},assets:assets.map(decode),users:users.map(decode),records:records.map(r=>({...r,snapshot:JSON.parse(r.snapshot)})),exceptions:exceptions.map(e=>({...decode(e),latestRepeat:repeatByException.get(e.id)||null})),actions:actions.map(decode),audit:audit.map(decode),temperatureSettings,today:centralDay()});
  }catch(e){return fail(e)}}
 export async function POST(req:Request){try{
  const origin=req.headers.get('origin');if(origin&&origin!==new URL(req.url).origin)throw new Problem('Please refresh ClinicalQC and try again.',403);

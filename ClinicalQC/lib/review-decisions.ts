@@ -1,5 +1,6 @@
 export const REVIEW_DECISIONS = [
   'Supervisor remediated',
+  'Reading entered in error',
   'Remedial education assigned',
   'Repeat QC completed within range',
   'Supplies replaced',
