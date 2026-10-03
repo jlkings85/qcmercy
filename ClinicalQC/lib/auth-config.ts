@@ -3,8 +3,9 @@ import {drizzleAdapter} from 'better-auth/adapters/drizzle';
 import {createAuthMiddleware,APIError} from 'better-auth/api';
 import {drizzle} from 'drizzle-orm/d1';
 import * as schema from '../db/auth-schema';
+import {hubOAuth} from './hub-oauth';
 
-export type AuthRuntime={db:D1Database;baseUrl:string;secret:string;ownerEmail:string;setupToken:string;sendEmail:(to:string,subject:string,text:string)=>Promise<unknown>;background?:(promise:Promise<unknown>)=>void};
+export type AuthRuntime={db:D1Database;baseUrl:string;secret:string;ownerEmail:string;setupToken:string;hubOrigin?:string;sendEmail:(to:string,subject:string,text:string)=>Promise<unknown>;background?:(promise:Promise<unknown>)=>void};
 export const emailKey=(value:string)=>value.trim().toLowerCase();
 export async function tokenHash(token:string){return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(token)))).map(x=>x.toString(16).padStart(2,'0')).join('');}
 export async function validEnrollment(db:D1Database,email:string,code:string){
@@ -31,7 +32,8 @@ export function createClinicalAuth(runtime:AuthRuntime){
   emailVerification:{sendOnSignUp:true,autoSignInAfterVerification:false,expiresIn:3600,
    sendVerificationEmail:async({user,url})=>{await runtime.sendEmail(user.email,'Verify your ClinicalQC email','Verify your email address to activate your login. Your administrator controls your QC access and testing credentials.\n\n'+url);}},
   session:{expiresIn:60*60*24*7,updateAge:60*60*24,cookieCache:{enabled:false}},
-  account:{accountLinking:{enabled:false}},
+  account:{accountLinking:runtime.hubOrigin?{enabled:true,trustedProviders:['mercy-hub']}:{enabled:false}},
+  plugins:runtime.hubOrigin?[hubOAuth(runtime.db,runtime.hubOrigin)]:[],
   user:{changeEmail:{enabled:false}},
   rateLimit:{enabled:true,storage:'database',window:60,max:60,customRules:{'/sign-in/email':{window:60,max:5},'/sign-up/email':{window:60,max:5},'/request-password-reset':{window:60,max:3},'/send-verification-email':{window:60,max:3}}},
   advanced:{...(runtime.background?{backgroundTasks:{handler:runtime.background}}:{}),cookiePrefix:'clinicalqc',useSecureCookies:origin.startsWith('https://'),ipAddress:{ipAddressHeaders:['cf-connecting-ip']}},
