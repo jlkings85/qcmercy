@@ -1,5 +1,5 @@
 import {createHubAuth} from './auth.mjs';
-import {moduleDestinations,HttpError,member,liveGrant,assertOrigin,saveGrant} from './access.mjs';
+import {moduleDestinations,HttpError,member,liveGrant,assertOrigin,saveGrant,saveMember,NARCS_PROFILES} from './access.mjs';
 import html from './public/index.html';
 import style from './public/style.css';
 import client from './public/client.js.txt';
@@ -23,7 +23,9 @@ export async function handle(request,env){
   for(const mod of moduleDestinations(env)){
    const g=await liveGrant(env,session.user.id,mod.id);
    if(!m.is_admin&&!mod.public&&!g)continue;
-   modules.push({...mod,connected:mod.public||!!configs.find(c=>c.id===mod.id)?.connected,hasAccess:mod.public||!!g,role:g?.account.role||null});
+   const connected=mod.public||!!configs.find(c=>c.id===mod.id)?.connected;
+   modules.push({...mod,connected,hasAccess:mod.public||!!g,role:g?.account.role||null,
+    launchUrl:connected&&!mod.public?(g?(mod.id==='evals'?'https://shifts.clinicalapps.app/suite-login/evaluations':mod.url+'/suite-login'):'/admin'):mod.url});
   }
   return json({user:{id:session.user.id,name:session.user.name,email:session.user.email,isAdmin:!!m.is_admin},modules});
  }
@@ -33,14 +35,18 @@ export async function handle(request,env){
    const users=(await env.DB.prepare('SELECT u.id,u.name,u.email,u.email_verified,m.enabled,m.is_admin FROM auth_user u LEFT JOIN hub_members m ON m.user_id=u.id ORDER BY u.name,u.email').all()).results;
    const grants=(await env.DB.prepare('SELECT * FROM hub_grants').all()).results;
    const profiles={qc:(await env.DB.prepare('SELECT o.id,o.name,o.email,o.role,o.active,l.auth_user_id FROM operators o JOIN qc_login_links l ON l.operator_id=o.id ORDER BY o.name').all()).results,shifts:env.SHIFTS_DB?(await env.SHIFTS_DB.prepare('SELECT p.id,p.name,p.email,p.role,p.active,p.auth_id auth_user_id FROM people p JOIN auth_user u ON u.id=p.auth_id WHERE u.email_verified=1 ORDER BY p.name').all()).results:[]};
-   const audit=(await env.DB.prepare('SELECT event,target_id,details,created_at FROM hub_audit ORDER BY created_at DESC LIMIT 30').all()).results;
-   return json({users,grants,profiles,audit});
+   const audit=(await env.DB.prepare('SELECT actor_id,event,target_id,details,created_at FROM hub_audit ORDER BY created_at DESC LIMIT 50').all()).results;
+   profiles.narcs=env.NARCS_DB?(await env.NARCS_DB.prepare(NARCS_PROFILES+' ORDER BY name').all()).results:[];
+   const connections=(await env.DB.prepare('SELECT id,connected FROM hub_modules').all()).results;
+   return json({users,grants,profiles,audit,modules:moduleDestinations(env).map(mod=>({id:mod.id,name:mod.name,public:!!mod.public,managed:['qc','shifts','narcs'].includes(mod.id),connected:!!connections.find(c=>c.id===mod.id)?.connected,dependsOn:mod.id==='evals'?'shifts':null}))});
   }
-  if(path==='/api/admin/grants'&&request.method==='POST'){
+  if(['/api/admin/grants','/api/admin/members'].includes(path)&&request.method==='POST'){
    assertOrigin(request,env.HUB_ORIGIN);
    if(!request.headers.get('content-type')?.startsWith('application/json'))throw new HttpError(415,'JSON is required.');
    const body=await request.text();if(body.length>4096)throw new HttpError(413,'Request is too large.');
-   return json(await saveGrant(env,session.user.id,JSON.parse(body)));
+   let payload;try{payload=JSON.parse(body);}catch{throw new HttpError(400,'Valid JSON is required.');}
+   if(!payload||typeof payload!=='object'||Array.isArray(payload))throw new HttpError(400,'An account change is required.');
+   return json(await (path.endsWith('/members')?saveMember:saveGrant)(env,session.user.id,payload));
   }
  }
  return json({error:'Not found.'},404);

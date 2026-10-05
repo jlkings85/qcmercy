@@ -11,6 +11,11 @@ await build({entryPoints:['../ClinicalQC/lib/auth-config.ts'],outfile:'test-resu
 const shiftsRoot=process.env.CLINICALSHIFTS_SOURCE||'../../clinicalshifts';
 const hasShiftsSource=existsSync(shiftsRoot+'/lib/auth-config.ts');
 if(hasShiftsSource)await build({entryPoints:[shiftsRoot+'/lib/auth-config.ts'],outfile:'test-results/shifts-auth.mjs',bundle:true,format:'esm',platform:'node',packages:'external'});
+await build({entryPoints:['clients/narcs.mjs'],outfile:'test-results/narcs.mjs',bundle:true,format:'esm',platform:'node',packages:'external'});
+const {createNarcsSSO,withNarcsSSO}=await import('../test-results/narcs.mjs');
+const narcsRoot=process.env.CLINICALNARCS_SOURCE;
+if(narcsRoot)await build({entryPoints:[narcsRoot+'/lib/auth-config.ts'],outfile:'test-results/native-narcs-auth.mjs',bundle:true,format:'esm',platform:'node',packages:'external'});
+const createNativeNarcs=narcsRoot?(await import('../test-results/native-narcs-auth.mjs')).createClinicalAuth:null;
 const {default:worker}=await import('../test-results/worker.mjs');
 const {createHubAuth}=await import('../test-results/auth.mjs');
 const {createClinicalAuth}=await import('../test-results/qc-auth.mjs');
@@ -108,9 +113,62 @@ test('ClinicalShifts cross-email link uses only the explicit verified profile, p
   assert.equal(shiftsSql.prepare('SELECT role FROM people WHERE id=\'historical-person\'').get().role,'admin');assert.equal(shiftsSql.prepare('SELECT COUNT(*) n FROM auth_user').get().n,1);
  }finally{globalThis.fetch=originalFetch;}
 });
+
+test('account administration prevents self-lockout, rejects nonadmins, and preserves clinical roles',async()=>{
+ const body={userId:'staff',enabled:true,isAdmin:true};
+ assert.equal((await call('/api/admin/members',{cookie:staffCookie,body})).status,403);
+ assert.equal((await call('/api/admin/members',{cookie:ownerCookie,body,headers:{Origin:'https://evil.test'}})).status,403);
+ assert.equal((await call('/api/admin/members',{cookie:ownerCookie,body:{userId:'owner',enabled:false,isAdmin:false}})).status,409);
+ assert.equal((await call('/api/admin/members',{cookie:ownerCookie,body:{userId:'owner',enabled:true,isAdmin:false}})).status,409);
+ assert.equal((await call('/api/admin/members',{cookie:ownerCookie,body:{userId:'staff',enabled:false,isAdmin:true}})).status,400);
+ assert.equal((await call('/api/admin/members',{cookie:ownerCookie,body})).status,200);
+ assert.equal((await call('/api/admin/accounts',{cookie:staffCookie})).status,200);
+ assert.equal(sql.prepare("SELECT role FROM operators WHERE id='staff'").get().role,'operator');
+ assert.equal((await call('/api/admin/members',{cookie:ownerCookie,body:{userId:'staff',enabled:false,isAdmin:false}})).status,200);
+ assert.equal((await call('/api/dashboard',{cookie:staffCookie})).status,401);
+ assert.equal((await call('/api/admin/members',{cookie:ownerCookie,body:{userId:'staff',enabled:true,isAdmin:false}})).status,200);
+ assert.equal((await call('/api/admin/accounts',{cookie:staffCookie})).status,403);
+});
+test('Narcs SSO preserves native profiles and rejects revoked access on existing sessions',async()=>{
+ const ns=new DatabaseSync(':memory:');
+ // The existing native core auth tables use the same schema as ClinicalQC.
+ for(const f of readdirSync('../ClinicalQC/drizzle').filter(f=>f.endsWith('.sql')).sort())ns.exec(readFileSync('../ClinicalQC/drizzle/'+f,'utf8'));
+ ns.exec('CREATE TABLE clinicalnarcs_records(space TEXT,revision INTEGER,state TEXT);CREATE TABLE narcs_login_links(person_id TEXT PRIMARY KEY,auth_user_id TEXT,email TEXT)');
+ const roster=JSON.stringify({people:[{id:'narcs-person',name:'Existing Narc Owner',email:'narcs@example.test',role:'admin',active:true}],inventory:[{id:'preserved-record',seal:'unchanged'}]});
+ ns.prepare("INSERT INTO clinicalnarcs_records VALUES('live',1,?)").run(roster);
+ ns.prepare("INSERT INTO auth_user(id,name,email,email_verified,created_at,updated_at) VALUES('narcs-auth','Existing Narc Owner','narcs@example.test',1,?,?)").run(Date.now(),Date.now());
+ ns.exec("INSERT INTO narcs_login_links VALUES('narcs-person','narcs-auth','narcs@example.test')");
+ const ne={DB:adapter(ns),HUB_DB:env.DB,HUB_ORIGIN:env.HUB_ORIGIN,HUB_LOGIN_ENABLED:'true',BETTER_AUTH_URL:'https://narcs.test',BETTER_AUTH_SECRET:'narcs-independent-secret-used-only-for-local-tests'};
+ env.NARCS_DB=ne.DB;
+ assert.equal((await call('/api/admin/grants',{cookie:ownerCookie,body:{userId:'owner',module:'narcs',localId:'narcs-person',enabled:true}})).status,200);
+ assert.equal((await call('/api/admin/grants',{cookie:ownerCookie,body:{userId:'staff',module:'narcs',localId:'narcs-person',enabled:true}})).status,409);
+ sql.prepare('INSERT INTO hub_oauthClient(id,clientId,name,redirectUris,scopes,grantTypes,responseTypes,tokenEndpointAuthMethod,requirePKCE,skipConsent,disabled,applicationType) VALUES(?,?,?,?,?,?,?,?,1,1,0,?)').run('narcs','clinical-narcs','ClinicalNarcs',JSON.stringify(['https://narcs.test/api/auth/callback/mercy-hub']),JSON.stringify(['openid','email','profile']),JSON.stringify(['authorization_code']),JSON.stringify(['code']),'none','web');
+ const native={fetch:async()=>Response.json({native:true})},wrapped=withNarcsSSO(native);
+ const originalFetch=globalThis.fetch;globalThis.fetch=async(input,init)=>{const req=input instanceof Request?input:new Request(input,init);if(new URL(req.url).origin==='https://hub.test')return worker.fetch(req,env);throw Error('Unexpected network');};
+ try{
+  const start=await wrapped.fetch(new Request('https://narcs.test/suite-login'),ne,{});assert.equal(start.status,302);
+  const authorize=await worker.fetch(new Request(start.headers.get('location'),{headers:{cookie:ownerCookie}}),env);
+  const callbackURL=authorize.headers.get('location')||(await authorize.json()).url;
+  const callback=await wrapped.fetch(new Request(callbackURL,{headers:{cookie:cookies(start)}}),ne,{});
+  assert.ok(!callback.headers.get('location')?.includes('error='),callback.headers.get('location'));
+  const nativeCookies=cookies(callback);assert.match(nativeCookies,/__Secure-clinicalnarcs.session_token=/);
+  const session=await createNarcsSSO(ne).api.getSession({headers:new Headers({cookie:nativeCookies})});assert.equal(session.user.id,'narcs-auth');
+  if(createNativeNarcs){const nativeAuth=createNativeNarcs({db:ne.DB,baseUrl:ne.BETTER_AUTH_URL,secret:ne.BETTER_AUTH_SECRET,ownerEmail:'narcs@example.test',setupToken:'',sendEmail:async()=>{throw Error('No email');}});const nativeSession=await nativeAuth.api.getSession({headers:new Headers({cookie:nativeCookies})});assert.equal(nativeSession?.user.id,'narcs-auth','Existing native auth accepts the shared login session');}
+  assert.equal(ns.prepare('SELECT COUNT(*) n FROM auth_user').get().n,1);
+  const request=()=>new Request('https://narcs.test/api/state',{headers:{cookie:nativeCookies}});
+  assert.equal((await wrapped.fetch(request(),ne,{})).status,200);
+  assert.equal((await call('/api/admin/grants',{cookie:ownerCookie,body:{userId:'owner',module:'narcs',localId:'narcs-person',enabled:false}})).status,200);
+  assert.equal((await wrapped.fetch(request(),ne,{})).status,403);
+  assert.equal((await wrapped.fetch(new Request('https://narcs.test/api/auth/sign-out',{method:'POST',headers:{cookie:nativeCookies}}),ne,{})).status,200);
+  assert.equal(ns.prepare('SELECT state FROM clinicalnarcs_records').get().state,roster);
+  assert.equal(ns.prepare('SELECT person_id FROM narcs_login_links').get().person_id,'narcs-person');
+  assert.equal((await call('/api/admin/grants',{cookie:ownerCookie,body:{userId:'owner',module:'narcs',localId:'narcs-person',enabled:true}})).status,200);
+ }finally{globalThis.fetch=originalFetch;}
+});
 test('access changes are audited, do not alter module records, and disabled members are denied',async()=>{
+ const before=sql.prepare('SELECT COUNT(*) n FROM hub_audit').get().n;
  const r=await call('/api/admin/grants',{cookie:ownerCookie,body:{userId:'staff',module:'qc',localId:'staff',enabled:false}});assert.equal(r.status,200,await r.text());
- assert.equal(sql.prepare('SELECT COUNT(*) n FROM hub_audit').get().n,1);
+ assert.equal(sql.prepare('SELECT COUNT(*) n FROM hub_audit').get().n,before+1);
  assert.equal(sql.prepare('SELECT active FROM operators WHERE id=\'staff\'').get().active,1);
  const d=await (await call('/api/dashboard',{cookie:staffCookie})).json();assert.deepEqual(d.modules.map(m=>m.id),['guidelines']);
  sql.prepare('UPDATE hub_members SET enabled=0 WHERE user_id=\'staff\'').run();assert.equal((await call('/api/dashboard',{cookie:staffCookie})).status,401);
