@@ -1,10 +1,18 @@
 export const MODULES=[
+ {id:'forms',name:'ClinicalForms',category:'Clinical operations',description:'Truck checks, clinical forms, and a flexible form builder.',url:'https://clinicalforms.jlkings85.chatgpt.site',icon:'clipboard',color:'teal'},
  {id:'qc',name:'ClinicalQC',category:'Clinical operations',description:'Quality controls, equipment, and exception review.',url:'https://qc.mercyems.net',icon:'activity',color:'blue'},
  {id:'narcs',name:'ClinicalNarcs',category:'Clinical operations',description:'Medication inventory, seal checks, and accountability.',url:'https://clinicalnarcs.app',icon:'shield',color:'violet'},
  {id:'shifts',name:'ClinicalShifts',category:'Education & development',description:'Student clinicals and preceptor scheduling.',url:'https://clinicalshifts.app',icon:'calendar',color:'teal'},
  {id:'evals',name:'ClinicalEvals',category:'Education & development',description:'Student and coworker evaluations.',url:'https://clinicalevals-demo.jlkings85.chatgpt.site',icon:'clipboard',color:'orange',preview:true},
  {id:'guidelines',name:'ClinicalGuidelines',category:'Clinical reference',description:'Guidelines, medications, policies, and procedures.',url:'https://guidelines.mercyems.net',icon:'book',color:'green',public:true},
+ {id:'credentials',name:'ClinicalCredentials',category:'Education & development',description:'Credentials, certifications, and renewal tracking.',url:'https://mercy-emr-credentials.jlkings85.chatgpt.site',icon:'shield',color:'blue'},
 ];
+// Only explicit module IDs can activate fixed, first-party destinations.
+export function moduleDestinations(env={}){
+ const active=new Set(String(env.CLINICALAPPS_LIVE_MODULES||'').split(',').map(x=>x.trim()).filter(Boolean));
+ for(const id of active)if(!MODULES.some(m=>m.id===id))throw Error('Unknown ClinicalApps module: '+id);
+ return MODULES.map(m=>({...m,plannedUrl:`https://${m.id}.clinicalapps.app`,domainReady:active.has(m.id),url:active.has(m.id)?`https://${m.id}.clinicalapps.app`:m.url}));
+}
 export class HttpError extends Error{constructor(status,message){super(message);this.status=status;}}
 export async function member(env,userId){return env.DB.prepare('SELECT * FROM hub_members WHERE user_id=? AND enabled=1').bind(userId).first();}
 export async function grant(env,userId,module){return env.DB.prepare('SELECT * FROM hub_grants WHERE user_id=? AND module=? AND enabled=1').bind(userId,module).first();}
