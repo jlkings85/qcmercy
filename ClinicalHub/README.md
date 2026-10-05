@@ -55,12 +55,12 @@ For each module:
 
 QC/temperature and narc seal entry from a truck check remain separate integration work. They must use the actual signed-in operator, native validation and audit records, stable request IDs for retry deduplication, and per-destination saved/pending/failed status. Narc seal observations must not imply an inventory count, reseal, or another person's signature. Domain routing alone does not implement this workflow.
 
-## Rollout checkpoint — October 5, 2026
+## Current rollout status — October 5, 2026
 
-- Cloudflare zone `clinicalapps.app` is active.
-- Forms, Guidelines, and Credentials custom domains are active with active TLS certificates. Their existing audience restrictions are unchanged. These three IDs are enabled in the prepared dashboard configuration.
-- `qc.clinicalapps.app`, `narcs.clinicalapps.app`, and `shifts.clinicalapps.app` are attached to the existing native Workers. Canonical login URLs remain unchanged because automatic approval review rejected the production authentication cutover. Do not activate these dashboard destinations until that cutover and validation succeed.
-- The standalone Evals Worker is integration-only. Its real UI opens at `/evaluations/` through ClinicalShifts, which supplies authenticated identity. Do not expose the integration-only Worker as an unauthenticated standalone UI. The Evals subdomain is not attached yet.
-- Automatic approval review also rejected deployment of the new dashboard Worker. No dashboard code or secret was deployed and no root domain attached. The new dashboard was tested locally; QC account links already exist in the shared database and are preserved.
-- Requested next approval: deploy the reviewed dashboard at `clinicalapps.app`, change native QC/Narcs/Shifts canonical login URLs to the three attached subdomains, and update exact login callback URLs as required. Existing clinical data must be retained. This may require users to sign in again.
-- Truck-check QC/temp and narc-seal integration is not yet implemented. It must not be presented as complete or enabled by this domain work.
+The dashboard is deployed at `https://clinicalapps.app`. All seven destination URLs are enabled. QC, Narcs, and Shifts retain their original Worker code and databases with updated canonical login URLs. The old QC and Shifts hostnames redirect to the new addresses using `redirects.mjs`. Evals routes through the existing authenticated Shifts evaluation area. Forms, Guidelines, and Credentials retain their Sites audience restrictions.
+
+No clinical records, existing passwords, or app permission grants were changed by this rollout. Native login pages and old-address redirects were verified in the browser. Actual user sign-in and module SSO remain unverified; shared-login flags have not been enabled. Truck-check QC/temp and narc-seal integration remains separate unfinished work.
+
+The legacy Narcs Site remains available. Its nine original history entries have matching record identifiers, revisions, request IDs, event IDs and timestamps in the standalone database, which also contains a newer settings revision. Both live inventories are empty. Sample-state payloads were truncated by the source viewer, so the sample-state comparison was not byte-for-byte.
+
+Rollback: retain prior Worker versions and restore the old canonical URL if needed. To restore old hostname routing, reattach `qc.mercyems.net` to `clinicalqc` and `clinicalshifts.app` to `clinicalshift`. Do not change database bindings or delete either app. The dashboard destination list can be reverted independently; it does not grant access or enable SSO.
