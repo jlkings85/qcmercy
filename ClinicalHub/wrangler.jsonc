@@ -7,7 +7,8 @@
   "vars": {"HUB_ORIGIN":"https://clinicalapps.app","CLINICALAPPS_LIVE_MODULES":"forms,guidelines,credentials,qc,narcs,shifts,evals"},
   "d1_databases": [
     {"binding":"DB","database_name":"mercyqc","database_id":"ce971014-a56f-4456-868d-b21cd1a3478c","migrations_dir":"migrations"},
-    {"binding":"SHIFTS_DB","database_name":"clinicalshift","database_id":"fbd37ca8-b280-412a-9c30-87b3aac3cdf2"}
+    {"binding":"SHIFTS_DB","database_name":"clinicalshift","database_id":"fbd37ca8-b280-412a-9c30-87b3aac3cdf2"},
+    {"binding":"NARCS_DB","database_name":"clinicalnarcs","database_id":"1d082974-fb98-4634-8d21-599cb16c1a4e"}
   ],
   "routes": [{"pattern":"clinicalapps.app","custom_domain":true}],
   "observability": {"enabled":true,"redact_query_string":true}
