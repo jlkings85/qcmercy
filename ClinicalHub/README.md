@@ -12,7 +12,7 @@ Cloudflare Worker for `https://clinicalapps.app`. Uses existing ClinicalQC ident
 
 ## Rollout boundaries
 
-The module status is read from `hub_modules`. Set `connected=1` only after the module client is deployed and its authorization round trip passes. Merely showing a module card does not enable SSO. Narcs and Evals retain their current access until their hosted source can be opened and integrated; Evals is a sample-data preview. Guidelines stays publicly readable.
+The module status is read from `hub_modules`. Set `connected=1` only after the module client is deployed and its authorization round trip passes. Merely showing a module card does not enable SSO. Narcs retains its current access until its hosted source can be opened and integrated. Evals opens through the authenticated ClinicalShifts evaluations route. Guidelines stays publicly readable.
 
 Account invitations and password recovery initially remain in ClinicalQC. New outside-student identity onboarding requires a subsequent shared invitation workflow; do not create QC clinical profiles simply to grant another module access. Signing out of the dashboard ends its session; already-open module sessions follow their own lifetime. Connected clients recheck central access before allowing work. Global logout is not yet implemented.
 
@@ -54,3 +54,13 @@ For each module:
 4. Add its ID to `CLINICALAPPS_LIVE_MODULES` after the new address passes. Retest the dashboard link. Roll back by removing the ID and restoring the prior native URL configuration/deployment if necessary. Retire old callbacks and domains only after the transition is complete.
 
 QC/temperature and narc seal entry from a truck check remain separate integration work. They must use the actual signed-in operator, native validation and audit records, stable request IDs for retry deduplication, and per-destination saved/pending/failed status. Narc seal observations must not imply an inventory count, reseal, or another person's signature. Domain routing alone does not implement this workflow.
+
+## Rollout checkpoint — October 5, 2026
+
+- Cloudflare zone `clinicalapps.app` is active.
+- Forms, Guidelines, and Credentials custom domains are active with active TLS certificates. Their existing audience restrictions are unchanged. These three IDs are enabled in the prepared dashboard configuration.
+- `qc.clinicalapps.app`, `narcs.clinicalapps.app`, and `shifts.clinicalapps.app` are attached to the existing native Workers. Canonical login URLs remain unchanged because automatic approval review rejected the production authentication cutover. Do not activate these dashboard destinations until that cutover and validation succeed.
+- The standalone Evals Worker is integration-only. Its real UI opens at `/evaluations/` through ClinicalShifts, which supplies authenticated identity. Do not expose the integration-only Worker as an unauthenticated standalone UI. The Evals subdomain is not attached yet.
+- Automatic approval review also rejected deployment of the new dashboard Worker. No dashboard code or secret was deployed and no root domain attached. The new dashboard was tested locally; QC account links already exist in the shared database and are preserved.
+- Requested next approval: deploy the reviewed dashboard at `clinicalapps.app`, change native QC/Narcs/Shifts canonical login URLs to the three attached subdomains, and update exact login callback URLs as required. Existing clinical data must be retained. This may require users to sign in again.
+- Truck-check QC/temp and narc-seal integration is not yet implemented. It must not be presented as complete or enabled by this domain work.
