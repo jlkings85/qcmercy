@@ -11,6 +11,7 @@ run(['tests/bulk-invitations.integration.mjs']);
 run(['tests/barcodes.mjs']);
 run(['tests/qc-device-location.mjs']);
 run(['tests/history-csv.integration.mjs']);
+run(['tests/history-queue.mjs']);
 run(['tests/exception-repeats.mjs']);
 run(['tests/trash.integration.mjs']);
 run(['node_modules/vinext/dist/cli.js','build']);
