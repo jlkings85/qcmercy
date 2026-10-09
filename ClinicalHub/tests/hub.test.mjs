@@ -23,7 +23,7 @@ const createShiftsAuth=hasShiftsSource?(await import('../test-results/shifts-aut
 function adapter(sql){function prepare(query,args=[]){return {bind(...a){return prepare(query,a);},async first(){return sql.prepare(query).get(...args)||null;},async all(){const results=sql.prepare(query).all(...args);return{results,meta:{changes:Number(sql.prepare('SELECT changes() n').get().n)}};},async raw(){const s=sql.prepare(query);s.setReturnArrays(true);return s.all(...args);},async run(){return{meta:{changes:Number(sql.prepare(query).run(...args).changes)}};}};}return{prepare,async batch(statements){sql.exec('BEGIN');try{const r=[];for(const s of statements)r.push(await s.all());sql.exec('COMMIT');return r;}catch(e){sql.exec('ROLLBACK');throw e;}}};}
 const sql=new DatabaseSync(':memory:');sql.exec('PRAGMA foreign_keys=ON');
 for(const f of readdirSync('../ClinicalQC/drizzle').filter(f=>f.endsWith('.sql')).sort())sql.exec(readFileSync('../ClinicalQC/drizzle/'+f,'utf8'));
-sql.exec(readFileSync('migrations/0001_hub.sql','utf8'));sql.exec(readFileSync('migrations/0002_site_roles.sql','utf8'));
+sql.exec(readFileSync('migrations/0001_hub.sql','utf8'));sql.exec(readFileSync('migrations/0002_site_roles.sql','utf8'));sql.exec(readFileSync('migrations/0003_people.sql','utf8'));
 const env={DB:adapter(sql),HUB_ORIGIN:'https://hub.test',HUB_SECRET:'testing-only-long-secret-not-for-any-production-environment'};
 const password='Testing-only-strong-password-2026!';const hash=await hashPassword(password);
 for(const [id,role]of [['owner','admin'],['staff','operator'],['outsider','operator']]){
@@ -166,7 +166,7 @@ test('Narcs SSO preserves native profiles and rejects revoked access on existing
  }finally{globalThis.fetch=originalFetch;}
 });
 test('Forms and Credentials share the central identity, enforce live app grants, and protect private backends',async()=>{
- await build({entryPoints:['sites/gateway.mjs'],outfile:'test-results/gateway.mjs',bundle:true,format:'esm',platform:'node',packages:'external'});
+ await build({entryPoints:['sites/gateway.mjs'],outfile:'test-results/gateway.mjs',plugins:[{name:'cloudflare-test',setup(b){b.onResolve({filter:/^cloudflare:workers$/},()=>({path:'cf',namespace:'test'}));b.onLoad({filter:/.*/,namespace:'test'},()=>({contents:'export class WorkerEntrypoint {}'}));}}],bundle:true,format:'esm',platform:'node',packages:'external'});
  const {gateway,APPS}=await import('../test-results/gateway.mjs');
  const {verifyIdentity}=await import('../sites/assertion.mjs');
  const ge={...env,SITES_AUTH_SECRET:'gateway-test-session-secret-never-production',FORMS_SIGNING_SECRET:'forms-test-envelope-secret-never-production',CREDENTIALS_SIGNING_SECRET:'credentials-test-envelope-secret-never-production',FORMS_SITE_TOKEN:'test-forms-service-token',CREDENTIALS_SITE_TOKEN:'test-credentials-service-token'};

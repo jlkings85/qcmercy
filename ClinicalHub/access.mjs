@@ -67,7 +67,7 @@ export async function saveMember(env,actorId,{userId,enabled,isAdmin}){
  if(userId===actorId&&(!enabled||!isAdmin))throw new HttpError(409,'Another administrator must change your own access.');
  if(isAdmin&&!enabled)throw new HttpError(400,'A dashboard administrator must have an enabled account.');
  const user=await env.DB.prepare('SELECT email_verified FROM auth_user WHERE id=?').bind(userId).first();
- if(!user||enabled&&!user.email_verified)throw new HttpError(400,'Only verified accounts can be enabled.');
+ if(!user||isAdmin&&!user.email_verified||enabled&&!user.email_verified&&!await env.DB.prepare('SELECT user_id FROM hub_people WHERE user_id=?').bind(userId).first())throw new HttpError(400,'Only verified accounts can be enabled.');
  const stamp=new Date().toISOString(),eventId=crypto.randomUUID();
  // Recheck the actor in the write itself. Concurrent administrators cannot
  // disable each other after one loses authority. Self-demotion is prohibited.

@@ -1,0 +1,15 @@
+# Central People & access
+
+The dashboard's `/people` and `/admin` routes now manage a shared person directory. Administrators enter a name and sign-in email once, optionally record phone, employee ID and region, then assign application access and roles. Existing app people can prefill the entry form. Historical links are retained; new profiles use the shared details. `/admin/links` retains explicit cross-email historical linking.
+
+New accounts start without a password and cannot sign in until a private setup link is redeemed. Links contain 256 random bits, are stored only as SHA-256 hashes, expire after seven days, are single-use, and are revoked when replaced. The token lives in the URL fragment and is removed from browser history on arrival. The administrator must deliver it privately; this feature sends no email. It cannot replace a password that already exists. Existing passwords and sessions are not reset.
+
+New QC profiles begin with testing credential status `pending`; existing qualifications, expiry, and history remain intact. Shifts supports role plus program, course, practice level and preceptor/FTO flags, preserving other profile fields. Site assignments and qualification approvals remain in Shifts. Evals inherits Shifts access. Narcs changes append an audited state revision while retaining inventory and historical signatures. Forms uses a direct module role. Credentials ensures a person exists without assigning a credential or rewriting historical IDs.
+
+Apply additive `migrations/0003_people.sql`. Deploy the updated Credentials private Site first, then the gateway exporting named `Provisioning`, then the hub with service binding `PRIVATE_APPS` pointing to `clinicalapps-private-apps`, entrypoint `Provisioning`. The named RPC entrypoint checks active administrator authority again and calls only the fixed private Credentials endpoint with its existing signed-identity mechanism. No new secret values are required.
+
+Per-person/module locks prevent concurrent provisioning. Because different databases cannot share a transaction, shared access is disabled while provisioning and enabled only after success. A failed change stays disabled with a retry message; successful earlier clinical records are not removed. All account/app changes are audited. Suspension applies to connected apps through their existing live grant checks.
+
+Validation runs with `FORMS_SOURCE`, `CREDENTIALS_SOURCE`, `CLINICALSHIFTS_SOURCE`, and `CLINICALNARCS_SOURCE` set to their respective source checkouts, using `npm test`. Tests cover real OAuth, enrollment/link replacement and replay, existing password preservation, duplicate entries, profile reuse, access/role boundaries, inventory preservation, and the private provisioning RPC.
+
+Rollback: restore the previous hub and gateway Worker versions and previous Credentials Site version if needed; retain the additive central tables. Do not delete users, auth accounts, historical links, app records, or storage. Pre-feature hub version `425b5b4c-eeb1-42e9-9b41-99ae08f2cd5d`; gateway `409f6138-4823-4452-9855-43f63b85c0a1`.
