@@ -1,3 +1,4 @@
+import {directory,savePerson,createSetupLink,activate,configureApp} from './people.mjs';
 import {createHubAuth} from './auth.mjs';
 import {moduleDestinations,HttpError,member,liveGrant,assertOrigin,saveGrant,saveMember,NARCS_PROFILES} from './access.mjs';
 import html from './public/index.html';
@@ -13,7 +14,12 @@ export async function handle(request,env){
  if(path==='/style.css')return new Response(style,{headers:{'Content-Type':'text/css; charset=utf-8'}});
  if(path==='/client.js')return new Response(client,{headers:{'Content-Type':'text/javascript; charset=utf-8'}});
  if(path==='/favicon.svg')return new Response('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="#123f68"/><path d="M28 14h8v14h14v8H36v14h-8V36H14v-8h14z" fill="#fff"/></svg>',{headers:{'Content-Type':'image/svg+xml'}});
- if(['/','/login','/consent','/admin'].includes(path))return new Response(html,{headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'}});
+ if(['/','/login','/consent','/admin','/people','/activate','/admin/links'].includes(path))return new Response(html,{headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'}});
+ if(path==='/api/activate'&&request.method==='POST'){
+  assertOrigin(request,env.HUB_ORIGIN);if(!request.headers.get('content-type')?.startsWith('application/json'))throw new HttpError(415,'JSON is required.');
+  const body=await request.text();if(body.length>2048)throw new HttpError(413,'Request is too large.');let data;try{data=JSON.parse(body);}catch{throw new HttpError(400,'Valid JSON is required.');}
+  return json(await activate(env,data||{}));
+ }
  const session=await auth.api.getSession({headers:request.headers});
  const m=session?.user.emailVerified?await member(env,session.user.id):null;
  if(!m)return json({error:'Sign in to your Mercy EMS account.'},401);
@@ -31,6 +37,7 @@ export async function handle(request,env){
  }
  if(path.startsWith('/api/admin/')){
   if(!m.is_admin)throw new HttpError(403,'Administrator access is required.');
+  if(path==='/api/admin/people'&&request.method==='GET')return json(await directory(env));
   if(path==='/api/admin/accounts'&&request.method==='GET'){
    const users=(await env.DB.prepare('SELECT u.id,u.name,u.email,u.email_verified,m.enabled,m.is_admin FROM auth_user u LEFT JOIN hub_members m ON m.user_id=u.id ORDER BY u.name,u.email').all()).results;
    const grants=(await env.DB.prepare('SELECT * FROM hub_grants').all()).results;
@@ -41,13 +48,13 @@ export async function handle(request,env){
    const connections=(await env.DB.prepare('SELECT id,connected FROM hub_modules').all()).results;
    return json({users,grants,profiles,audit,siteRoles,modules:moduleDestinations(env).map(mod=>({id:mod.id,name:mod.name,public:!!mod.public,managed:['qc','shifts','narcs','forms','credentials'].includes(mod.id),connected:!!connections.find(c=>c.id===mod.id)?.connected,dependsOn:mod.id==='evals'?'shifts':null}))});
   }
-  if(['/api/admin/grants','/api/admin/members'].includes(path)&&request.method==='POST'){
+  if(['/api/admin/grants','/api/admin/members','/api/admin/people','/api/admin/setup-link','/api/admin/app-access'].includes(path)&&request.method==='POST'){
    assertOrigin(request,env.HUB_ORIGIN);
    if(!request.headers.get('content-type')?.startsWith('application/json'))throw new HttpError(415,'JSON is required.');
    const body=await request.text();if(body.length>4096)throw new HttpError(413,'Request is too large.');
    let payload;try{payload=JSON.parse(body);}catch{throw new HttpError(400,'Valid JSON is required.');}
    if(!payload||typeof payload!=='object'||Array.isArray(payload))throw new HttpError(400,'An account change is required.');
-   return json(await (path.endsWith('/members')?saveMember:saveGrant)(env,session.user.id,payload));
+   const operation={'/api/admin/members':saveMember,'/api/admin/grants':saveGrant,'/api/admin/people':savePerson,'/api/admin/setup-link':createSetupLink,'/api/admin/app-access':configureApp}[path];return json(await operation(env,session.user.id,payload));
   }
  }
  return json({error:'Not found.'},404);

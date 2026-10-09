@@ -42,13 +42,18 @@ test('Forms members cannot access other submissions or files, edit forms, or res
  assert.equal(sql.prepare('SELECT COUNT(*) n FROM submissions').get().n,1);
 });
 test('Credentials shared identity retains historical person IDs and restricts member access',{skip:!process.env.CREDENTIALS_SOURCE},async()=>{
- const root=process.env.CREDENTIALS_SOURCE;const {sql,api,call}=await harness(root,'credentials',`export * as server from '${root}/lib/server.ts';`);
+ const root=process.env.CREDENTIALS_SOURCE;const {sql,api,call}=await harness(root,'credentials',`export * as server from '${root}/lib/server.ts';export * as credentials from '${root}/app/api/credentials/route.ts';`);
  sql.prepare('INSERT INTO program(id,owner_id,owner_email,created_at,catalog_version) VALUES(?,?,?,?,1)').run('mercy','historical-owner','owner@example.test','now');
  sql.prepare('INSERT INTO people(id,name,email,user_id,agency,created_at) VALUES(?,?,?,?,?,?)').run('old-person','A',user.email,'historical-person-auth','','now');
  const own=await call(user,'/check',async()=>Response.json(await api.server.personAccess('old-person')));assert.equal((await own.json()).user.userId,'historical-person-auth');
  await assert.rejects(call(other,'/check',()=>api.server.personAccess('old-person')),e=>e.status===403);
  await assert.rejects(call(user,'/check',()=>api.server.administrator()),e=>e.status===403);
  await call(admin,'/check',()=>api.server.administrator());
+ const directoryBody={action:'directoryPerson',name:'Central name',email:user.email};
+ assert.equal((await call(user,'/api/credentials',api.credentials.POST,directoryBody)).status,403);
+ assert.equal((await call(admin,'/api/credentials',api.credentials.POST,directoryBody)).status,200);
+ assert.equal(sql.prepare('SELECT COUNT(*) n FROM people').get().n,1);
+ assert.equal(sql.prepare('SELECT id FROM people').get().id,'old-person');
  assert.equal(sql.prepare('SELECT owner_id FROM program').get().owner_id,'historical-owner');
  assert.equal(sql.prepare('SELECT user_id FROM people').get().user_id,'historical-person-auth');
 });

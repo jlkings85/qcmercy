@@ -33,3 +33,5 @@ export async function gateway(request,env,context,transport=fetch){
  return new Response(response.body,{status:response.status,headers:outgoing});
 }
 export default {async fetch(request,env,context){try{return await gateway(request,env,context);}catch(e){console.error('Shared app request failed',{type:e?.name});return json('The app connection is temporarily unavailable.',503);}}};
+
+export {Provisioning} from "./provisioning.mjs";
