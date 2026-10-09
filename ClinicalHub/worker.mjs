@@ -37,8 +37,9 @@ export async function handle(request,env){
    const profiles={qc:(await env.DB.prepare('SELECT o.id,o.name,o.email,o.role,o.active,l.auth_user_id FROM operators o JOIN qc_login_links l ON l.operator_id=o.id ORDER BY o.name').all()).results,shifts:env.SHIFTS_DB?(await env.SHIFTS_DB.prepare('SELECT p.id,p.name,p.email,p.role,p.active,p.auth_id auth_user_id FROM people p JOIN auth_user u ON u.id=p.auth_id WHERE u.email_verified=1 ORDER BY p.name').all()).results:[]};
    const audit=(await env.DB.prepare('SELECT actor_id,event,target_id,details,created_at FROM hub_audit ORDER BY created_at DESC LIMIT 50').all()).results;
    profiles.narcs=env.NARCS_DB?(await env.NARCS_DB.prepare(NARCS_PROFILES+' ORDER BY name').all()).results:[];
+   const siteRoles=(await env.DB.prepare('SELECT user_id,module,role FROM hub_site_roles').all()).results;
    const connections=(await env.DB.prepare('SELECT id,connected FROM hub_modules').all()).results;
-   return json({users,grants,profiles,audit,modules:moduleDestinations(env).map(mod=>({id:mod.id,name:mod.name,public:!!mod.public,managed:['qc','shifts','narcs'].includes(mod.id),connected:!!connections.find(c=>c.id===mod.id)?.connected,dependsOn:mod.id==='evals'?'shifts':null}))});
+   return json({users,grants,profiles,audit,siteRoles,modules:moduleDestinations(env).map(mod=>({id:mod.id,name:mod.name,public:!!mod.public,managed:['qc','shifts','narcs','forms','credentials'].includes(mod.id),connected:!!connections.find(c=>c.id===mod.id)?.connected,dependsOn:mod.id==='evals'?'shifts':null}))});
   }
   if(['/api/admin/grants','/api/admin/members'].includes(path)&&request.method==='POST'){
    assertOrigin(request,env.HUB_ORIGIN);

@@ -23,7 +23,7 @@ const createShiftsAuth=hasShiftsSource?(await import('../test-results/shifts-aut
 function adapter(sql){function prepare(query,args=[]){return {bind(...a){return prepare(query,a);},async first(){return sql.prepare(query).get(...args)||null;},async all(){const results=sql.prepare(query).all(...args);return{results,meta:{changes:Number(sql.prepare('SELECT changes() n').get().n)}};},async raw(){const s=sql.prepare(query);s.setReturnArrays(true);return s.all(...args);},async run(){return{meta:{changes:Number(sql.prepare(query).run(...args).changes)}};}};}return{prepare,async batch(statements){sql.exec('BEGIN');try{const r=[];for(const s of statements)r.push(await s.all());sql.exec('COMMIT');return r;}catch(e){sql.exec('ROLLBACK');throw e;}}};}
 const sql=new DatabaseSync(':memory:');sql.exec('PRAGMA foreign_keys=ON');
 for(const f of readdirSync('../ClinicalQC/drizzle').filter(f=>f.endsWith('.sql')).sort())sql.exec(readFileSync('../ClinicalQC/drizzle/'+f,'utf8'));
-sql.exec(readFileSync('migrations/0001_hub.sql','utf8'));
+sql.exec(readFileSync('migrations/0001_hub.sql','utf8'));sql.exec(readFileSync('migrations/0002_site_roles.sql','utf8'));
 const env={DB:adapter(sql),HUB_ORIGIN:'https://hub.test',HUB_SECRET:'testing-only-long-secret-not-for-any-production-environment'};
 const password='Testing-only-strong-password-2026!';const hash=await hashPassword(password);
 for(const [id,role]of [['owner','admin'],['staff','operator'],['outsider','operator']]){
@@ -164,6 +164,38 @@ test('Narcs SSO preserves native profiles and rejects revoked access on existing
   assert.equal(ns.prepare('SELECT person_id FROM narcs_login_links').get().person_id,'narcs-person');
   assert.equal((await call('/api/admin/grants',{cookie:ownerCookie,body:{userId:'owner',module:'narcs',localId:'narcs-person',enabled:true}})).status,200);
  }finally{globalThis.fetch=originalFetch;}
+});
+test('Forms and Credentials share the central identity, enforce live app grants, and protect private backends',async()=>{
+ await build({entryPoints:['sites/gateway.mjs'],outfile:'test-results/gateway.mjs',bundle:true,format:'esm',platform:'node',packages:'external'});
+ const {gateway,APPS}=await import('../test-results/gateway.mjs');
+ const {verifyIdentity}=await import('../sites/assertion.mjs');
+ const ge={...env,SITES_AUTH_SECRET:'gateway-test-session-secret-never-production',FORMS_SIGNING_SECRET:'forms-test-envelope-secret-never-production',CREDENTIALS_SIGNING_SECRET:'credentials-test-envelope-secret-never-production',FORMS_SITE_TOKEN:'test-forms-service-token',CREDENTIALS_SITE_TOKEN:'test-credentials-service-token'};
+ const originalFetch=globalThis.fetch;globalThis.fetch=async(input,init)=>{const req=input instanceof Request?input:new Request(input,init);if(new URL(req.url).origin===env.HUB_ORIGIN)return worker.fetch(req,env);throw Error('Unexpected network');};
+ try {for(const module of ['forms','credentials']){
+  const origin=APPS[module].origin;
+  sql.prepare('INSERT INTO hub_oauthClient(id,clientId,name,redirectUris,scopes,grantTypes,responseTypes,tokenEndpointAuthMethod,requirePKCE,skipConsent,disabled,applicationType) VALUES(?,?,?,?,?,?,?,?,1,1,0,?)').run(module,'clinical-'+module,module,JSON.stringify([origin+'/api/auth/callback/mercy-hub']),JSON.stringify(['openid','email','profile']),JSON.stringify(['authorization_code']),JSON.stringify(['code']),'none','web');
+  const grant={userId:'owner',module,enabled:true,role:'admin'};
+  assert.equal((await call('/api/admin/grants',{cookie:staffCookie,body:grant})).status,403);
+  assert.equal((await call('/api/admin/grants',{cookie:ownerCookie,body:{...grant,role:'superuser'}})).status,400);
+  assert.equal((await call('/api/admin/grants',{cookie:ownerCookie,body:grant})).status,200);
+  let calls=0;
+  const transport=async req=>{calls++;assert.equal(new URL(req.url).origin,APPS[module].upstream);assert.equal(req.headers.get('cookie'),null);assert.equal(req.headers.get('authorization'),null);assert.equal(req.headers.get('oai-authenticated-user-email'),null);assert.equal(req.headers.get('x-forwarded-host'),null);assert.equal(req.headers.get('oai-sites-authorization'),'Bearer '+ge[module.toUpperCase()+'_SITE_TOKEN']);const identity=await verifyIdentity(ge[module.toUpperCase()+'_SIGNING_SECRET'],req.headers.get('x-clinicalapps-identity'),module,req);assert.equal(identity.id,'owner');assert.equal(identity.role,'admin');return Response.json({ok:true},{headers:{'Set-Cookie':'upstream=should-not-leak'}});};
+  const callApp=(path,opts={})=>gateway(new Request(origin+path,opts),ge,{},transport);
+  assert.equal((await callApp('/api/forms')).status,401);assert.equal(calls,0);
+  const start=await callApp('/suite-login');assert.equal(start.status,302);
+  const authorization=await worker.fetch(new Request(start.headers.get('location'),{headers:{cookie:ownerCookie}}),env);
+  const callbackURL=authorization.headers.get('location')||(await authorization.json()).url;
+  const callback=await gateway(new Request(callbackURL,{headers:{cookie:cookies(start)}}),ge,{},transport);
+  assert.ok(!callback.headers.get('location')?.includes('error='),callback.headers.get('location'));
+  const cookie=cookies(callback);assert.match(cookie,new RegExp('clinicalapps-'+module+'.session_token'));
+  const headers={cookie,authorization:'Bearer untrusted','oai-authenticated-user-email':'attacker@test','x-clinicalapps-identity':'forged','x-forwarded-host':'evil.test'};
+  const allowed=await callApp('/api/forms',{headers});assert.equal(allowed.status,200);assert.equal(allowed.headers.get('set-cookie'),null);assert.equal(allowed.headers.get('cache-control'),'private, no-store');
+  assert.equal((await callApp('/api/forms',{method:'POST',headers:{...headers,Origin:'https://evil.test'},body:'{}'})).status,403);
+  const redirect=await gateway(new Request(origin+'/file',{headers:{cookie}}),ge,{},async()=>new Response(null,{status:302,headers:{Location:'https://evil.test/'}}));assert.equal(redirect.status,502);
+  const before=calls;assert.equal((await call('/api/admin/grants',{cookie:ownerCookie,body:{...grant,enabled:false}})).status,200);assert.equal((await callApp('/api/forms',{headers})).status,403);assert.equal(calls,before);
+  assert.equal((await call('/api/admin/grants',{cookie:ownerCookie,body:grant})).status,200);
+  assert.equal(sql.prepare('SELECT COUNT(*) n FROM auth_user').get().n,3);
+ }}finally{globalThis.fetch=originalFetch;}
 });
 test('access changes are audited, do not alter module records, and disabled members are denied',async()=>{
  const before=sql.prepare('SELECT COUNT(*) n FROM hub_audit').get().n;
