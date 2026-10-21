@@ -10,6 +10,7 @@ run(['tests/migration.integration.mjs']);
 run(['tests/bulk-invitations.integration.mjs']);
 run(['tests/barcodes.mjs']);
 run(['tests/qc-device-location.mjs']);
+run(['tests/qc-temperature.mjs']);
 run(['tests/history-csv.integration.mjs']);
 run(['tests/history-queue.mjs']);
 run(['tests/exception-repeats.mjs']);

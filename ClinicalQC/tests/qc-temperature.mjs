@@ -1,0 +1,24 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import ts from 'typescript';
+function load(path,deps={}){const source=readFileSync(path,'utf8').replace(/^import .*;\n/gm,'');const js=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;const exports={};new Function('exports',...Object.keys(deps),js)(exports,...Object.values(deps));return exports;}
+const {qcTemperatureExempt}=load('lib/qc-temperature-policy.ts');
+let writes=0;
+const {qcTemperature}=load('lib/qc-temperature.ts',{qcTemperatureExempt,Problem:Error,temperatureStatements(input){writes++;return {snapshot:input,statements:['temperature insert']}}});
+const greene={id:'4247bc0a-7403-4c3e-ae6b-1909ad27796b'},ordinary={id:'other',label:'3200'},special={id:'6cc6f543-d536-41bd-88ce-34cae2b38528',label:'3101'},settings={qcEnabled:true,revision:1};
+const run=(truck,department,input,parent,config=settings)=>qcTemperature(input,truck,{},'2026-10-21','qc',config,parent,department);
+assert.equal(run(ordinary,greene).capture.mode,'exempt');
+assert.equal(writes,0);
+assert.throws(()=>run(special,greene),/Enter the daily/);
+assert.throws(()=>run({...special,label:'Renamed'},greene),/Enter the daily/);
+assert.throws(()=>run({id:'replacement',label:'3101'},greene),/Enter the daily/);
+assert.throws(()=>run(ordinary,{id:'another-county'}),/Enter the daily/);
+assert.equal(run(special,greene,{high:70,low:60,current:65}).capture.mode,'recorded');
+assert.equal(writes,1);
+assert.equal(run(ordinary,greene,{high:100}).capture.mode,'exempt');assert.equal(writes,1);
+const parent={id:'prior',snapshot:{temperature:{qcRecordId:'prior',observedDate:'2026-10-21'}}};
+assert.equal(run(special,greene,undefined,parent).capture.mode,'reused');assert.equal(writes,1);
+assert.equal(run(ordinary,greene,undefined,{id:'prior',snapshot:{}}).capture.mode,'repeat_without_temperature');
+assert.equal(run(special,greene,undefined,undefined,{qcEnabled:false,revision:2}).capture.mode,'disabled');
+assert.equal(qcTemperatureExempt(greene,undefined),false);
+console.log('Temperature policy passed: Greene exemption, 3101 requirement, other counties, repeats, global off, audit capture.');
