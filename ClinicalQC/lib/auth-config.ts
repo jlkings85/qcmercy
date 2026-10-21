@@ -3,6 +3,7 @@ import {drizzleAdapter} from 'better-auth/adapters/drizzle';
 import {createAuthMiddleware,APIError} from 'better-auth/api';
 import {drizzle} from 'drizzle-orm/d1';
 import * as schema from '../db/auth-schema';
+import {claimEnrollment} from './enrollment';
 import {hubOAuth} from './hub-oauth';
 
 export type AuthRuntime={db:D1Database;baseUrl:string;secret:string;ownerEmail:string;setupToken:string;hubOrigin?:string;sendEmail:(to:string,subject:string,text:string)=>Promise<unknown>;background?:(promise:Promise<unknown>)=>void};
@@ -27,9 +28,9 @@ export function createClinicalAuth(runtime:AuthRuntime){
   appName:'ClinicalQC',baseURL:origin,secret:runtime.secret,
   database:drizzleAdapter(drizzle(runtime.db,{schema}),{provider:'sqlite',schema,transaction:false}),
   trustedOrigins:[origin],
-  emailAndPassword:{enabled:true,requireEmailVerification:true,minPasswordLength:12,maxPasswordLength:128,autoSignIn:false,revokeSessionsOnPasswordReset:true,
+  emailAndPassword:{enabled:true,requireEmailVerification:false,minPasswordLength:8,maxPasswordLength:128,autoSignIn:true,revokeSessionsOnPasswordReset:true,
    sendResetPassword:async({user,url})=>{await runtime.sendEmail(user.email,'Reset your ClinicalQC password','Use this link to choose a new password. If you did not request this, you can ignore this email.\n\n'+url);}},
-  emailVerification:{sendOnSignUp:true,autoSignInAfterVerification:false,expiresIn:3600,
+  emailVerification:{sendOnSignUp:false,autoSignInAfterVerification:false,expiresIn:3600,
    sendVerificationEmail:async({user,url})=>{await runtime.sendEmail(user.email,'Verify your ClinicalQC email','Verify your email address to activate your login. Your administrator controls your QC access and testing credentials.\n\n'+url);}},
   session:{expiresIn:60*60*24*7,updateAge:60*60*24,cookieCache:{enabled:false}},
   account:{accountLinking:runtime.hubOrigin?{enabled:true,trustedProviders:['mercy-hub']}:{enabled:false}},
@@ -43,6 +44,10 @@ export function createClinicalAuth(runtime:AuthRuntime){
    const code=ctx.headers?.get('x-clinical-invitation')||'';
    const owner=await validOwnerEnrollment(runtime,email,code);
    if(!owner&&!await validEnrollment(runtime.db,email,code))throw new APIError('FORBIDDEN',{message:'Use the invitation and email address provided by your ClinicalQC administrator.'});
+  }),after:createAuthMiddleware(async ctx=>{
+   if(ctx.path!=='/sign-up/email'||!ctx.context.newSession)return;
+   const user=ctx.context.newSession.user;
+   await claimEnrollment(runtime,{userId:user.id,email:user.email},ctx.headers?.get('x-clinical-invitation')||'',true);
   })},
  });
 }
