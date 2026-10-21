@@ -40,7 +40,7 @@ test('authenticated dashboard, role boundaries, and exact historical links',asyn
  assert.equal((await call('/api/dashboard')).status,401);
  assert.equal((await call('/api/auth/sign-in/email',{body:{email:'outsider@example.test',password}})).status,401);
  ownerCookie=await login('owner@example.test');staffCookie=await login('staff@example.test');
- const d=await (await call('/api/dashboard',{cookie:ownerCookie})).json();assert.equal(d.user.isAdmin,true);assert.equal(d.modules.length,5);assert.equal(d.modules.find(m=>m.id==='qc').connected,false);
+ const d=await (await call('/api/dashboard',{cookie:ownerCookie})).json();assert.equal(d.user.isAdmin,true);assert.equal(d.modules.length,7);assert.equal(d.modules.find(m=>m.id==='qc').connected,false);
  const sd=await (await call('/api/dashboard',{cookie:staffCookie})).json();assert.equal(sd.user.isAdmin,false);assert.deepEqual(sd.modules.map(m=>m.id),['qc','guidelines']);
  assert.equal((await call('/api/admin/accounts',{cookie:staffCookie})).status,403);
  assert.equal((await call('/api/dashboard',{cookie:ownerCookie+'tampered'})).status,401);

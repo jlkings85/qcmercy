@@ -1,5 +1,5 @@
 import {createHubAuth} from './auth.mjs';
-import {MODULES,HttpError,member,liveGrant,assertOrigin,saveGrant} from './access.mjs';
+import {moduleDestinations,HttpError,member,liveGrant,assertOrigin,saveGrant} from './access.mjs';
 import html from './public/index.html';
 import style from './public/style.css';
 import client from './public/client.js.txt';
@@ -20,7 +20,7 @@ export async function handle(request,env){
  if(path==='/api/dashboard'&&request.method==='GET'){
   const configs=(await env.DB.prepare('SELECT id,connected FROM hub_modules').all()).results;
   const modules=[];
-  for(const mod of MODULES){
+  for(const mod of moduleDestinations(env)){
    const g=await liveGrant(env,session.user.id,mod.id);
    if(!m.is_admin&&!mod.public&&!g)continue;
    modules.push({...mod,connected:mod.public||!!configs.find(c=>c.id===mod.id)?.connected,hasAccess:mod.public||!!g,role:g?.account.role||null});
