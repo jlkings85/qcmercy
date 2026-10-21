@@ -17,6 +17,7 @@ export class HttpError extends Error{constructor(status,message){super(message);
 export async function member(env,userId){return env.DB.prepare('SELECT * FROM hub_members WHERE user_id=? AND enabled=1').bind(userId).first();}
 export async function grant(env,userId,module){return env.DB.prepare('SELECT * FROM hub_grants WHERE user_id=? AND module=? AND enabled=1').bind(userId,module).first();}
 export async function localAccount(env,module,id){
+ if(['forms','credentials'].includes(module))return env.DB.prepare('SELECT u.id,u.id auth_user_id,u.name,u.email,u.email_verified active,r.role FROM auth_user u JOIN hub_site_roles r ON r.user_id=u.id AND r.module=? WHERE u.id=?').bind(module,id).first();
  if(module==='qc')return env.DB.prepare('SELECT o.id,o.name,o.email,o.role,o.active,l.auth_user_id FROM operators o LEFT JOIN qc_login_links l ON l.operator_id=o.id WHERE o.id=?').bind(id).first();
  if(module==='shifts'&&env.SHIFTS_DB)return env.SHIFTS_DB.prepare('SELECT p.id,p.name,p.email,p.role,p.active,p.auth_id auth_user_id FROM people p WHERE p.id=?').bind(id).first();
  if(module==='narcs'&&env.NARCS_DB)return env.NARCS_DB.prepare(`${NARCS_PROFILES} WHERE json_extract(j.value,'$.id')=?`).bind(id).first();
@@ -35,7 +36,8 @@ export async function liveGrant(env,userId,module){
  return local?.active&&local.auth_user_id?{...g,account:local}:null;
 }
 export function assertOrigin(request,origin){if(request.headers.get('origin')!==origin)throw new HttpError(403,'Please use the Mercy EMS dashboard to make this change.');}
-export async function saveGrant(env,actorId,{userId,module,localId,enabled}){
+export async function saveGrant(env,actorId,{userId,module,localId,enabled,role}){
+ if(['forms','credentials'].includes(module))return saveSiteGrant(env,actorId,{userId,module,enabled,role});
  if(!['qc','shifts','narcs'].includes(module)||typeof userId!=='string'||typeof localId!=='string'||typeof enabled!=='boolean')throw new HttpError(400,'Choose an account, module, and profile.');
  const user=await env.DB.prepare('SELECT id,email,email_verified FROM auth_user WHERE id=?').bind(userId).first();
  const local=await localAccount(env,module,localId);
@@ -79,5 +81,20 @@ export async function saveMember(env,actorId,{userId,enabled,isAdmin}){
    SELECT ?,?,?,?,?,? WHERE changes()>0`).bind(eventId,actorId,'account_access_updated',userId,JSON.stringify({enabled,isAdmin}),stamp),
  ]);
  if(!results[0].meta.changes)throw new HttpError(403,'Your administrator access changed. Reload the dashboard.');
+ return {ok:true};
+}
+
+export async function saveSiteGrant(env,actorId,{userId,module,enabled,role}){
+ if(typeof userId!=='string'||typeof enabled!=='boolean'||!['admin','member'].includes(role))throw new HttpError(400,'Choose a verified account and an app role.');
+ const user=await env.DB.prepare('SELECT email_verified FROM auth_user WHERE id=?').bind(userId).first();
+ if(!user?.email_verified)throw new HttpError(400,'The shared account must be verified.');
+ const stamp=new Date().toISOString();
+ const results=await env.DB.batch([
+ env.DB.prepare('INSERT INTO hub_members(user_id,is_admin,enabled,created_at) SELECT ?,0,1,? WHERE EXISTS(SELECT 1 FROM hub_members WHERE user_id=? AND enabled=1 AND is_admin=1) ON CONFLICT(user_id) DO NOTHING').bind(userId,stamp,actorId),
+ env.DB.prepare('INSERT INTO hub_site_roles(user_id,module,role) SELECT ?,?,? WHERE EXISTS(SELECT 1 FROM hub_members WHERE user_id=? AND enabled=1 AND is_admin=1) ON CONFLICT(user_id,module) DO UPDATE SET role=excluded.role').bind(userId,module,role,actorId),
+ env.DB.prepare('INSERT INTO hub_grants(user_id,module,local_id,enabled,updated_at) SELECT ?,?,?,?,? WHERE EXISTS(SELECT 1 FROM hub_members WHERE user_id=? AND enabled=1 AND is_admin=1) ON CONFLICT(user_id,module) DO UPDATE SET enabled=excluded.enabled,updated_at=excluded.updated_at WHERE hub_grants.local_id=excluded.local_id').bind(userId,module,userId,Number(enabled),stamp,actorId),
+ env.DB.prepare('INSERT INTO hub_audit(id,actor_id,event,target_id,details,created_at) SELECT ?,?,?,?,?,? WHERE changes()>0').bind(crypto.randomUUID(),actorId,'module_access_updated',userId,JSON.stringify({module,enabled,role}),stamp),
+ ]);
+ if(!results[2].meta.changes)throw new HttpError(403,'Administrator access changed. Reload the dashboard.');
  return {ok:true};
 }
