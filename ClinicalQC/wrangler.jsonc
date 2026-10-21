@@ -19,7 +19,7 @@
   },
   "keep_vars": true,
   "vars": {
-    "BETTER_AUTH_URL": "https://qc.mercyems.net"
+    "BETTER_AUTH_URL": "https://qc.clinicalapps.app"
   },
   "routes": [
     {

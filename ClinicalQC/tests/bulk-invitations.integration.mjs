@@ -55,4 +55,30 @@ assert.equal((await post('https://other.example.org')).status,403);assert.equal(
 user={role:'operator'};assert.equal((await post('https://qc.example.org')).status,403);assert.equal(sends,0);
 user={id:'owner',name:'Owner',role:'admin'};assert.equal((await post('https://qc.example.org',{...request,requestId:'invalid'})).status,400);assert.equal(sends,0);
 assert.equal((await post('https://qc.example.org')).status,200);assert.equal(sends,1);
+
+// The single-user button sends the existing link; all messages are captured locally.
+const emailDeps={...deps,one:async(q,...a)=>prepare(q,a).first(),stmt:(q,...a)=>prepare(q,a),tokenHash:async v=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(v))),b=>b.toString(16).padStart(2,'0')).join('')};
+const emailSource=readFileSync('app/api/invitations/email/route.ts','utf8').replace(/^import .*;\n/gm,'');
+const emailJS=ts.transpileModule(emailSource,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;
+const emailExports={};new Function('exports',...Object.keys(emailDeps),emailJS)(emailExports,...Object.values(emailDeps));
+const pending=sql.prepare("SELECT * FROM qc_invitations WHERE operator_id='staff' AND revoked_at IS NULL").get();
+const pendingToken=messages[1][2].match(/#invite=([a-f0-9]+)/)[1];
+const body={operatorId:'staff',expectedEmail:'staff@mercyems.net',code:pendingToken};
+const single=(value=body,origin='https://qc.example.org')=>emailExports.POST(new Request('https://qc.example.org/api/invitations/email',{method:'POST',headers:{origin},body:JSON.stringify(value)}));
+const before=messages.length;
+user={role:'operator'};assert.equal((await single()).status,403);
+user={id:'owner',name:'Owner',role:'admin'};
+assert.equal((await single(body,'https://other.example.org')).status,403);
+assert.equal((await single({...body,expectedEmail:'other@mercyems.net'})).status,409);
+assert.equal((await single({...body,code:'0'.repeat(64)})).status,409);
+assert.equal(messages.length,before);
+assert.equal((await single()).status,200);
+assert.equal(messages.length,before+1);
+assert.ok(messages.at(-1)[2].includes('#invite='+pendingToken));
+assert.equal(messages.at(-1)[0],body.expectedEmail);
+assert.equal((await single()).status,200);assert.equal(messages.length,before+1);
+sql.prepare("UPDATE qc_invitations SET revoked_at=? WHERE id=?").run(new Date().toISOString(),pending.id);
+assert.equal((await single()).status,409);
+assert.equal(messages.length,before+1);
+console.log('Single invitation email passed: same link, registered recipient, admin/origin checks, stale token rejection, duplicate prevention.');
 sql.close();console.log('Bulk invitations passed: recipient eligibility, duplicate prevention, explicit resends, provider failure, audit history, unchanged credentials, admin-only access, and cross-origin rejection.');
