@@ -25,6 +25,10 @@
     {
       "pattern": "qc.mercyems.net",
       "custom_domain": true
+    },
+    {
+      "pattern": "qc.clinicalapps.app",
+      "custom_domain": true
     }
   ]
 }
