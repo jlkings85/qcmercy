@@ -1,0 +1,46 @@
+[
+  {
+    "id": "cpb-14c37c088658",
+    "title": "NOVA Xpress Clinical Practice Bulletin",
+    "category": "Clinical Practice Bulletin",
+    "version": "September 2025",
+    "filename": "CLIN3478 CPB_9.26.25.pdf",
+    "mime": "application/pdf",
+    "storage_key": "14c37c088658172987dfe2ed2908a60e3e762d07ce91a377af1d6e265ccefe18",
+    "sha256": "14c37c088658172987dfe2ed2908a60e3e762d07ce91a377af1d6e265ccefe18",
+    "required": 1
+  },
+  {
+    "id": "policy-abe2ce958fbe",
+    "title": "Glucometer Reagent Storage, Temperature Monitoring, and QC Policy",
+    "category": "Policy",
+    "version": "Uploaded October 22, 2026",
+    "filename": "Glucometer Reagent and QC Policy.docx",
+    "mime": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "storage_key": "abe2ce958fbefc2f281cfcd8c51e604ce489319c2d2f1e6f194b4dcf72807aff",
+    "sha256": "abe2ce958fbefc2f281cfcd8c51e604ce489319c2d2f1e6f194b4dcf72807aff",
+    "required": 1
+  },
+  {
+    "id": "manual-ebe90931d70c",
+    "title": "Nova StatStrip Xpress 2 Manufacturer Instructions",
+    "category": "Meter manual",
+    "version": "Uploaded October 22, 2026",
+    "filename": "Nova Xpress Manufacturer's Instructions for Use.pdf",
+    "mime": "application/pdf",
+    "storage_key": "ebe90931d70c62a8d1af41b86edc510e86636aef46fa96b73cbf7be511a0e8ac",
+    "sha256": "ebe90931d70c62a8d1af41b86edc510e86636aef46fa96b73cbf7be511a0e8ac",
+    "required": 0
+  },
+  {
+    "id": "guideline-e38d543b5d21",
+    "title": "EMS Nova Xpress Guidelines",
+    "category": "Policy",
+    "version": "September 2026",
+    "filename": "EMS Nova Xpress Guideline September 2026.pdf",
+    "mime": "application/pdf",
+    "storage_key": "e38d543b5d2141b5ee87cd8e4f442914b2d7266a75f0870dba2b69c075e38020",
+    "sha256": "e38d543b5d2141b5ee87cd8e4f442914b2d7266a75f0870dba2b69c075e38020",
+    "required": 1
+  }
+]

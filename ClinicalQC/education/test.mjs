@@ -1,0 +1,35 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+import {DatabaseSync} from 'node:sqlite';
+import {withEducation,page} from './education.mjs';
+new vm.Script(page.match(/<script>([\s\S]+)<\/script>/)[1]);
+const db=new DatabaseSync(':memory:');
+db.exec(`CREATE TABLE records(id TEXT PRIMARY KEY,operator_id TEXT,device_id TEXT,occurred_at TEXT,created_at TEXT,status TEXT,snapshot TEXT);CREATE TABLE audit(id TEXT PRIMARY KEY,actor_id TEXT,actor_name TEXT,created_at TEXT,entity_id TEXT,event TEXT,details TEXT); CREATE TABLE operators(id TEXT PRIMARY KEY,name TEXT,email TEXT);`);
+db.exec(fs.readFileSync(new URL('schema.sql',import.meta.url),'utf8'));
+for(const id of ['policy','guideline','cpb','manual'])db.prepare('INSERT INTO qc_education_documents VALUES(?,?,?,?,?,?,?,?,?,?,?)').run(id,id,id,'v1',id+'.pdf','application/pdf',id,'hash',id==='manual'?0:1,1,new Date().toISOString());
+const ago=h=>new Date(Date.now()-h*3600000).toISOString();
+function add(id,user,status,series=id,repeatOf=null,h=0,historical=false){db.prepare('INSERT INTO records VALUES(?,?,?,?,?,?,?)').run(id,user,'meter',ago(h),ago(0),status,JSON.stringify({historical,input:{seriesId:series,...(repeatOf?{repeatOf}:{})}}));}
+add('old','old-user','historical_exception','old',null,50,true);assert.equal(db.prepare('SELECT COUNT(*) n FROM qc_education_assignments').get().n,0);
+add('first','user1','exception');assert.equal(db.prepare('SELECT state FROM qc_education_assignments').get().state,'pending');assert.equal(db.prepare('SELECT COUNT(*) n FROM qc_education_items').get().n,3);
+add('pass','user1','pass','first','first');assert.equal(db.prepare("SELECT state FROM qc_education_assignments WHERE operator_id='user1'").get().state,'cancelled');
+add('fail1','user2','exception');add('fail2','user2','exception','fail1','fail1');assert.equal(db.prepare("SELECT COUNT(*) n FROM qc_education_assignments WHERE operator_id='user2'").get().n,1);assert.equal(db.prepare("SELECT state FROM qc_education_assignments WHERE operator_id='user2'").get().state,'assigned');
+assert.throws(()=>add('blocked','user2','pass'),/Complete assigned/);
+add('late','user3','exception','late',null,25);assert.throws(()=>add('blocked-late','user3','pass'),/Complete assigned/);
+add('other','user4','pass');
+const D1={prepare(sql){let args=[];return {bind(...v){args=v;return this},async first(){return db.prepare(sql).get(...args)||null},async all(){return {results:db.prepare(sql).all(...args)}},async run(){return db.prepare(sql).run(...args)}}},async batch(statements){db.exec('BEGIN');try{const results=[];for(const s of statements)results.push(await s.run());db.exec('COMMIT');return results}catch(e){db.exec('ROLLBACK');throw e}}};
+let signedIn=true,who='user2',role='operator',nativeSubmits=0;
+const native={async fetch(req){if(new URL(req.url).pathname==='/api/qc'&&req.method==='GET')return new Response(JSON.stringify(signedIn?{me:{id:who,name:who,active:1,role}}:{error:'Sign in'}),{status:signedIn?200:401,headers:{'Content-Type':'application/json'}});nativeSubmits++;return new Response('{}',{headers:{'Content-Type':'application/json'}})}};
+const app=withEducation(native),env={DB:D1,QC_DOCUMENTS:{async get(){return new Uint8Array([1,2,3]).buffer}}};
+const call=(path,body,origin='https://qc.example')=>app.fetch(new Request('https://qc.example'+path,{method:body?'POST':'GET',headers:body?{'Content-Type':'application/json',origin}:{},body:body?JSON.stringify(body):undefined}),env,{});
+assert.equal((await call('/api/qc',{op:'submitQC',value:{requestId:'x'}})).status,403);assert.equal(nativeSubmits,0);
+assert.equal((await call('/api/education/review')).status,403);
+assert.equal((await call('/api/education/acknowledge',{assignmentId:'education:fail1',documentId:'policy',acknowledged:true})).status,400);
+assert.equal((await call('/api/education/open',{assignmentId:'education:late',documentId:'policy'})).status,404);
+assert.equal((await call('/api/education/open',{assignmentId:'education:fail1',documentId:'policy'},'https://evil.example')).status,403);
+for(const documentId of ['policy','guideline','cpb']){assert.equal((await call('/api/education/open',{assignmentId:'education:fail1',documentId})).status,200);assert.equal((await call('/api/education/acknowledge',{assignmentId:'education:fail1',documentId,acknowledged:true})).status,200)}
+assert.equal(db.prepare("SELECT state FROM qc_education_assignments WHERE operator_id='user2'").get().state,'completed');assert.equal(db.prepare('SELECT COUNT(*) n FROM audit').get().n,3);
+assert.equal((await call('/api/qc',{op:'submitQC',value:{requestId:'unblocked'}})).status,200);
+add('again','user2','exception','fail1','fail2');assert.equal(db.prepare("SELECT COUNT(*) n FROM qc_education_assignments WHERE operator_id='user2'").get().n,2);
+signedIn=false;assert.equal((await call('/api/education/file/manual')).status,401);
+console.log('PASS: live failures only, 24h deadline, passing/failed repeats, cross-user isolation, per-document acknowledgements, CSRF, authenticated downloads, renewed failure, and database-enforced lockout.');
