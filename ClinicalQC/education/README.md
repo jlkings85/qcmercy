@@ -18,7 +18,7 @@ Worker: `clinicalqc`. Existing D1 binding: `DB`. Add KV binding `QC_DOCUMENTS`, 
 
 Apply the table portion of `schema.sql`, register `documents.json` metadata, then apply its triggers. Do not backfill assignments from old QC records.
 
-The production entry point at this release is `central-entry.mjs`, which wraps `fleet-entry.js`. Deploy these two extra modules while retaining every existing module, asset, binding, compatibility setting, and route:
+The production entry point at this release is `central-entry.mjs`, which wraps `fleet-entry.js`. Deploy `education.mjs`, `education-navigation.mjs`, and the entry module below while retaining every existing module, asset, binding, compatibility setting, and route:
 
 ```js
 // education-entry.mjs
@@ -30,6 +30,6 @@ export default withEducation(native);
 
 Do not replace the deployed Worker with the older repository build: the central and Fleet modules were deployed separately. A future full build must preserve those integrations and wrap its final handler with `withEducation`.
 
-Routes: `/education`, `/api/education`, `/api/education/file/:id`, `/api/education/open`, `/api/education/acknowledge`, and reviewer-only `/api/education/review`. The navigation script is added to authenticated application HTML; authentication uses the existing app's account checks. The UI shows outstanding assignments and a reviewer acknowledgement table.
+Routes: `/education`, `/api/education`, `/api/education/file/:id`, `/api/education/open`, `/api/education/acknowledge`, and reviewer-only `/api/education/review`. The navigation script is added to authenticated application HTML; authentication uses the existing app's account checks. Documents & Education is a sidebar menu item with a mobile shortcut. Navigation remains present during application rerenders and does not depend on the badge request succeeding. The UI shows outstanding assignments and a reviewer acknowledgement table.
 
 Run `node test.mjs` on Node 24 to exercise deadlines, repeats, database enforcement, acknowledgement requirements, and access controls in an isolated in-memory database.
